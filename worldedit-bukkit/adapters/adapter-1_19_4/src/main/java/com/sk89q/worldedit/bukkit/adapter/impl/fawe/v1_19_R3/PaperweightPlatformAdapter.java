@@ -1,4 +1,4 @@
-package com.sk89q.worldedit.bukkit.adapter.impl.fawe.v1_19_R1;
+package com.sk89q.worldedit.bukkit.adapter.impl.fawe.v1_19_R3;
 
 import com.destroystokyo.paper.util.maplist.EntityList;
 import com.fastasyncworldedit.bukkit.adapter.CachedBukkitAdapter;

@@ -81,7 +81,7 @@ import com.sk89q.worldedit.world.block.BlockTypes;
 import com.sk89q.worldedit.world.item.ItemType;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
+import net.minecraft.core.Registry;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
 import net.minecraft.resources.ResourceKey;
@@ -115,7 +115,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkStatus;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.dimension.LevelStem;
-import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.WorldGenSettings;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.PrimaryLevelData;
 import net.minecraft.world.phys.BlockHitResult;
@@ -179,11 +179,6 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
     public PaperweightAdapter() throws NoSuchFieldException, NoSuchMethodException {
         // A simple test
         CraftServer.class.cast(Bukkit.getServer());
-
-        int dataVersion = CraftMagicNumbers.INSTANCE.getDataVersion();
-        if (dataVersion != 3337) {
-            throw new UnsupportedClassVersionError("Not 1.19.4!");
-        }
 
         serverWorldsField = CraftServer.class.getDeclaredField("worlds");
         serverWorldsField.setAccessible(true);
@@ -283,11 +278,11 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
 
     private static Block getBlockFromType(BlockType blockType) {
 
-        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registries.BLOCK).get(ResourceLocation.tryParse(blockType.getId()));
+        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.BLOCK_REGISTRY).get(ResourceLocation.tryParse(blockType.getId()));
     }
 
     private static Item getItemFromType(ItemType itemType) {
-        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registries.ITEM).get(ResourceLocation.tryParse(itemType.getId()));
+        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.ITEM_REGISTRY).get(ResourceLocation.tryParse(itemType.getId()));
     }
 
     @Override
@@ -547,7 +542,7 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
     @Override
     public org.bukkit.inventory.ItemStack adapt(BaseItemStack item) {
         ItemStack stack = new ItemStack(
-                DedicatedServer.getServer().registryAccess().registryOrThrow(Registries.ITEM).get(ResourceLocation.tryParse(item.getType().getId())),
+                DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.ITEM_REGISTRY).get(ResourceLocation.tryParse(item.getType().getId())),
                 item.getAmount()
         );
         stack.setTag(((net.minecraft.nbt.CompoundTag) fromNative(item.getNbtData())));
@@ -629,11 +624,11 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
             ServerLevel originalWorld = ((CraftWorld) bukkitWorld).getHandle();
             PrimaryLevelData levelProperties = (PrimaryLevelData) originalWorld.getServer()
                     .getWorldData().overworldData();
-            WorldOptions originalOpts = levelProperties.worldGenOptions();
+            WorldGenSettings originalOpts = levelProperties.worldGenSettings();
 
             long seed = options.getSeed().orElse(originalWorld.getSeed());
-            WorldOptions newOpts = options.getSeed().isPresent()
-                    ? originalOpts.withSeed(OptionalLong.of(seed))
+            WorldGenSettings newOpts = options.getSeed().isPresent()
+                    ? originalOpts.withSeed(originalWorld.serverLevelData.isHardcore(), OptionalLong.of(seed))
                     : originalOpts;
 
             LevelSettings newWorldSettings = new LevelSettings(
@@ -643,17 +638,11 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
                     levelProperties.settings.difficulty(),
                     levelProperties.settings.allowCommands(),
                     levelProperties.settings.gameRules(),
-                    levelProperties.settings.getDataConfiguration()
+                    levelProperties.settings.getDataPackConfig()
             );
 
-            PrimaryLevelData.SpecialWorldProperty specialWorldProperty =
-                    levelProperties.isFlatWorld()
-                            ? PrimaryLevelData.SpecialWorldProperty.FLAT
-                            : levelProperties.isDebugWorld()
-                                    ? PrimaryLevelData.SpecialWorldProperty.DEBUG
-                                    : PrimaryLevelData.SpecialWorldProperty.NONE;
 
-            PrimaryLevelData newWorldData = new PrimaryLevelData(newWorldSettings, newOpts, specialWorldProperty, Lifecycle.stable());
+            PrimaryLevelData newWorldData = new PrimaryLevelData(newWorldSettings, newOpts, Lifecycle.stable());
 
             ServerLevel freshWorld = new ServerLevel(
                     originalWorld.getServer(),
@@ -690,7 +679,7 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
     }
 
     private BiomeType adapt(ServerLevel serverWorld, Biome origBiome) {
-        ResourceLocation key = serverWorld.registryAccess().registryOrThrow(Registries.BIOME).getKey(origBiome);
+        ResourceLocation key = serverWorld.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY).getKey(origBiome);
         if (key == null) {
             return null;
         }

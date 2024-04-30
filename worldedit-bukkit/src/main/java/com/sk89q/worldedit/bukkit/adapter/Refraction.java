@@ -39,7 +39,8 @@ public class Refraction {
     }
 
     public static String pickName(String mojangName, String spigotName) {
-        return IS_MOJANG_MAPPED ? mojangName : spigotName;
+        return mojangName; // Gamula
+//        return IS_MOJANG_MAPPED ? mojangName : spigotName;
     }
 
     private Refraction() {

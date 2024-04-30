@@ -84,8 +84,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static net.minecraft.core.registries.Registries.BIOME;
-
 public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBlocks {
 
     private static final Logger LOGGER = LogManagerCompat.getLogger();
@@ -133,7 +131,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         this.maxSectionPosition = maxHeight >> 4;
         this.skyLight = new DataLayer[getSectionCount()];
         this.blockLight = new DataLayer[getSectionCount()];
-        this.biomeRegistry = serverLevel.registryAccess().registryOrThrow(BIOME);
+        this.biomeRegistry = serverLevel.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY);
         this.biomeHolderIdMap = biomeRegistry.asHolderIdMap();
     }
 

@@ -220,11 +220,6 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
         return this.fixer = new WrappedDataFixer(DataFixers.getDataFixer());
     }
 
-    @Override
-    public DataFixer buildOptimized(final Set<DSL.TypeReference> requiredTypes, Executor executor) {
-        return buildUnoptimized();
-    }
-
     @SuppressWarnings("unchecked")
     private class WrappedDataFixer implements DataFixer {
         private final DataFixer realFixer;

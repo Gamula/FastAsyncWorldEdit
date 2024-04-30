@@ -40,7 +40,7 @@ class PaperweightFakePlayer extends ServerPlayer {
     private static final Vec3 ORIGIN = new Vec3(0.0D, 0.0D, 0.0D);
 
     PaperweightFakePlayer(ServerLevel world) {
-        super(world.getServer(), world, FAKE_WORLDEDIT_PROFILE);
+        super(world.getServer(), world, FAKE_WORLDEDIT_PROFILE, null);
     }
 
     @Override

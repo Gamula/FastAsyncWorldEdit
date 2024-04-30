@@ -52,7 +52,6 @@ import io.papermc.lib.PaperLib;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.WritableRegistry;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -101,8 +100,6 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static net.minecraft.core.registries.Registries.BIOME;
 
 public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.Tag, ServerLevel> {
 
@@ -227,7 +224,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     }
 
     public Block getBlock(BlockType blockType) {
-        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registries.BLOCK)
+        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.BLOCK_REGISTRY)
                 .get(new ResourceLocation(blockType.getNamespace(), blockType.getResource()));
     }
 
@@ -479,7 +476,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     @Override
     public org.bukkit.inventory.ItemStack adapt(BaseItemStack baseItemStack) {
         ItemStack stack = new ItemStack(
-                DedicatedServer.getServer().registryAccess().registryOrThrow(Registries.ITEM)
+                DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.ITEM_REGISTRY)
                         .get(ResourceLocation.tryParse(baseItemStack.getType().getId())),
                 baseItemStack.getAmount()
         );
@@ -546,7 +543,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         final Registry<Biome> registry = MinecraftServer
                 .getServer()
                 .registryAccess()
-                .registryOrThrow(BIOME);
+                .registryOrThrow(Registry.BIOME_REGISTRY);
         ResourceLocation resourceLocation = ResourceLocation.tryParse(biomeType.getId());
         Biome biome = registry.get(resourceLocation);
         return registry.getId(biome);
@@ -557,7 +554,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         WritableRegistry<Biome> biomeRegistry = (WritableRegistry<Biome>) ((CraftServer) Bukkit.getServer())
                 .getServer()
                 .registryAccess()
-                .registryOrThrow(BIOME);
+                .registryOrThrow(Registry.BIOME_REGISTRY);
         List<ResourceLocation> keys = biomeRegistry.stream()
                 .map(biomeRegistry::getKey).filter(Objects::nonNull).toList();
         List<NamespacedKey> namespacedKeys = new ArrayList<>();
