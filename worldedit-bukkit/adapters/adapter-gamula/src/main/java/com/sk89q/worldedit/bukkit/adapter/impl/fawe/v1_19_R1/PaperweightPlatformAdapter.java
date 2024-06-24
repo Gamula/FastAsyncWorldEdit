@@ -661,7 +661,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         return List.of();
     }
 
-    public static void readEntityIntoTag(Entity entity, net.minecraft.nbt.CompoundTag compoundTag) {
+    public static void readEntityIntoTag(Entity entity, net.minecraft.nbt.NBTTagCompound compoundTag) {
         boolean isVillager = entity instanceof AbstractVillager && !Fawe.isMainThread();
         boolean unset = false;
         if (isVillager) {

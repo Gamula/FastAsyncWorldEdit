@@ -1,17 +1,24 @@
-import io.papermc.paperweight.userdev.PaperweightUserDependenciesExtension
-
 plugins {
     java
+    `java-library`
 }
 
-applyPaperweightAdapterConfiguration()
+applyCommonConfiguration()
 
 repositories {
     gradlePluginPortal()
+
+    maven {
+        name = "GitHubPackages"
+        url = uri("https://maven.pkg.github.com/Gamula/pvpwars-libraries")
+        credentials {
+            username = project.findProperty("gpr.user") as String? ?: System.getenv("USERNAME")
+            password = project.findProperty("gpr.key") as String? ?: System.getenv("TOKEN")
+        }
+    }
 }
 
 dependencies {
-    // url=https://repo.papermc.io/service/rest/repository/browse/maven-public/io/papermc/paper/dev-bundle/1.19.2-R0.1-SNAPSHOT/
-    the<PaperweightUserDependenciesExtension>().paperDevBundle("1.19.2-R0.1-20221206.184705-189")
-    compileOnly(libs.paperlib)
+    compileOnly("net.pvpwars:pvpwars-libs:1.1.3-SNAPSHOT")
+    implementation(project(":worldedit-bukkit"))
 }

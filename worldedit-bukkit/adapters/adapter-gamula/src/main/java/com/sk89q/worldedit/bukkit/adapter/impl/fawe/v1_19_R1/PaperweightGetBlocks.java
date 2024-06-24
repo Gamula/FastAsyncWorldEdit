@@ -386,7 +386,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
             @Override
             public Iterator<CompoundTag> iterator() {
                 Iterable<CompoundTag> result = entities.stream().map(input -> {
-                    net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+                    net.minecraft.nbt.NBTTagCompound tag = new net.minecraft.nbt.NBTTagCompound();
                     PaperweightPlatformAdapter.readEntityIntoTag(input, tag);
                     return (CompoundTag) adapter.toNative(tag);
                 }).collect(Collectors.toList());
@@ -747,7 +747,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                             if (type != null) {
                                 Entity entity = type.create(nmsWorld);
                                 if (entity != null) {
-                                    final net.minecraft.nbt.CompoundTag tag = (net.minecraft.nbt.CompoundTag) adapter.fromNative(
+                                    final net.minecraft.nbt.NBTTagCompound tag = (net.minecraft.nbt.NBTTagCompound) adapter.fromNative(
                                             nativeTag);
                                     for (final String name : Constants.NO_COPY_ENTITY_NBT_FIELDS) {
                                         tag.remove(name);
@@ -796,7 +796,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                                     tileEntity = nmsWorld.getBlockEntity(pos);
                                 }
                                 if (tileEntity != null) {
-                                    final net.minecraft.nbt.CompoundTag tag = (net.minecraft.nbt.CompoundTag) adapter.fromNative(
+                                    final net.minecraft.nbt.NBTTagCompound tag = (net.minecraft.nbt.NBTTagCompound) adapter.fromNative(
                                             nativeTag);
                                     tag.put("x", IntTag.valueOf(x));
                                     tag.put("y", IntTag.valueOf(y));

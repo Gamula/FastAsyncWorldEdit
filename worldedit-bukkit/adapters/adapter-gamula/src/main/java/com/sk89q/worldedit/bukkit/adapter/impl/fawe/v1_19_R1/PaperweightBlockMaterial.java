@@ -15,7 +15,7 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Material;
 import net.minecraft.world.level.material.PushReaction;
-import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NBTTagList;
 import org.bukkit.craftbukkit.v1_19_R1.block.data.CraftBlockData;
 
 public class PaperweightBlockMaterial implements BlockMaterial {

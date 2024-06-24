@@ -101,7 +101,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.Tag, ServerLevel> {
+public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.NBTBase, ServerLevel> {
 
     private static final Logger LOGGER = LogManagerCompat.getLogger();
     private static Method CHUNK_HOLDER_WAS_ACCESSIBLE_SINCE_LAST_SAVE;
@@ -134,7 +134,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     }
 
     @Override
-    public BukkitImplAdapter<net.minecraft.nbt.Tag> getParent() {
+    public BukkitImplAdapter<net.minecraft.nbt.NBTBase> getParent() {
         return parent;
     }
 
@@ -270,7 +270,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
             // Read the NBT data
             BlockEntity blockEntity = chunk.getBlockEntity(blockPos, LevelChunk.EntityCreationType.CHECK);
             if (blockEntity != null) {
-                net.minecraft.nbt.CompoundTag tag = blockEntity.saveWithId();
+                net.minecraft.nbt.NBTTagCompound tag = blockEntity.saveWithId();
                 return state.toBaseBlock((CompoundBinaryTag) toNativeBinary(tag));
             }
         }
@@ -300,7 +300,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         if (id != null) {
             EntityType type = com.sk89q.worldedit.world.entity.EntityTypes.get(id);
             Supplier<CompoundBinaryTag> saveTag = () -> {
-                final net.minecraft.nbt.CompoundTag minecraftTag = new net.minecraft.nbt.CompoundTag();
+                final net.minecraft.nbt.NBTTagCompound minecraftTag = new net.minecraft.nbt.NBTTagCompound();
                 PaperweightPlatformAdapter.readEntityIntoTag(mcEntity, minecraftTag);
                 //add Id for AbstractChangeSet to work
                 final CompoundBinaryTag tag = (CompoundBinaryTag) toNativeBinary(minecraftTag);
@@ -480,7 +480,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
                         .get(ResourceLocation.tryParse(baseItemStack.getType().getId())),
                 baseItemStack.getAmount()
         );
-        stack.setTag(((net.minecraft.nbt.CompoundTag) fromNative(baseItemStack.getNbtData())));
+        stack.setTag(((net.minecraft.nbt.NBTTagCompound) fromNative(baseItemStack.getNbtData())));
         return CraftItemStack.asCraftMirror(stack);
     }
 
@@ -516,12 +516,12 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     }
 
     @Override
-    public Tag toNative(net.minecraft.nbt.Tag foreign) {
+    public Tag toNative(net.minecraft.nbt.NBTBase foreign) {
         return parent.toNative(foreign);
     }
 
     @Override
-    public net.minecraft.nbt.Tag fromNative(Tag foreign) {
+    public net.minecraft.nbt.NBTBase fromNative(Tag foreign) {
         if (foreign instanceof PaperweightLazyCompoundTag) {
             return ((PaperweightLazyCompoundTag) foreign).get();
         }

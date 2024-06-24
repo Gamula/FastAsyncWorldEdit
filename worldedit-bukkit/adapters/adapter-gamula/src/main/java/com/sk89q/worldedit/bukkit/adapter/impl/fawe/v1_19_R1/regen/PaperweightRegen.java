@@ -19,13 +19,13 @@ import com.sk89q.worldedit.world.RegenOptions;
 import it.unimi.dsi.fastutil.objects.Object2ObjectArrayMap;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.dedicated.DedicatedServer;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.ChunkTaskPriorityQueueSorter.Message;
-import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.server.level.ChunkProviderServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ThreadedLevelLightEngine;
 import net.minecraft.server.level.progress.ChunkProgressListener;
@@ -167,9 +167,9 @@ public class PaperweightRegen extends Regenerator<ChunkAccess, ProtoChunk, Level
 
     //runtime
     private ServerLevel originalServerWorld;
-    private ServerChunkCache originalChunkProvider;
+    private ChunkProviderServer originalChunkProvider;
     private ServerLevel freshWorld;
-    private ServerChunkCache freshChunkProvider;
+    private ChunkProviderServer freshChunkProvider;
     private LevelStorageSource.LevelStorageAccess session;
     private StructureTemplateManager structureTemplateManager;
     private ThreadedLevelLightEngine threadedLevelLightEngine;
@@ -317,7 +317,7 @@ public class PaperweightRegen extends Regenerator<ChunkAccess, ProtoChunk, Level
         }
 //        chunkGenerator.conf = freshWorld.spigotConfig; - Does not exist anymore, may need to be re-addressed
 
-        freshChunkProvider = new ServerChunkCache(
+        freshChunkProvider = new ChunkProviderServer(
                 freshWorld,
                 session,
                 server.getFixerUpper(),
@@ -565,7 +565,7 @@ public class PaperweightRegen extends Regenerator<ChunkAccess, ProtoChunk, Level
         private static final ProcessorHandle<Message<Runnable>> HANDLE = ProcessorHandle.of("fawe-no-op", m -> {
         });
 
-        public NoOpLightEngine(final ServerChunkCache chunkProvider) {
+        public NoOpLightEngine(final ChunkProviderServer chunkProvider) {
             super(chunkProvider, chunkProvider.chunkMap, false, MAILBOX, HANDLE);
         }
 

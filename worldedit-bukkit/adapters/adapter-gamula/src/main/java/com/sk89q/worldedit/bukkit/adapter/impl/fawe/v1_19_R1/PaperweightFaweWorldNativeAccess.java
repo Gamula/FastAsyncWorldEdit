@@ -13,10 +13,10 @@ import com.sk89q.worldedit.util.nbt.CompoundBinaryTag;
 import com.sk89q.worldedit.world.block.BlockState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.server.level.ServerChunkCache;
+import net.minecraft.server.level.ChunkProviderServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -139,7 +139,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
         if (blockEntity == null) {
             return false;
         }
-        net.minecraft.nbt.Tag nativeTag = paperweightFaweAdapter.fromNativeBinary(tag);
+        net.minecraft.nbt.NBTBase nativeTag = paperweightFaweAdapter.fromNativeBinary(tag);
         blockEntity.load((CompoundTag) nativeTag);
         return true;
     }
@@ -163,7 +163,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     @Override
     public void markBlockChanged(LevelChunk levelChunk, BlockPos blockPos) {
         if (levelChunk.getSections()[level.get().getSectionIndex(blockPos.getY())] != null) {
-            ((ServerChunkCache) getLevel().getChunkSource()).blockChanged(blockPos);
+            ((ChunkProviderServer) getLevel().getChunkSource()).blockChanged(blockPos);
         }
     }
 

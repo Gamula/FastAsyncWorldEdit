@@ -7,7 +7,7 @@ import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
 import com.sk89q.worldedit.bukkit.WorldEditPlugin;
 import com.sk89q.worldedit.util.nbt.CompoundBinaryTag;
-import net.minecraft.nbt.NumericTag;
+import net.minecraft.nbt.NBTNumber;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,19 +18,19 @@ import java.util.function.Supplier;
 
 public class PaperweightLazyCompoundTag extends LazyCompoundTag {
 
-    private final Supplier<net.minecraft.nbt.CompoundTag> compoundTagSupplier;
+    private final Supplier<net.minecraft.nbt.NBTTagCompound> compoundTagSupplier;
     private CompoundTag compoundTag;
 
-    public PaperweightLazyCompoundTag(Supplier<net.minecraft.nbt.CompoundTag> compoundTagSupplier) {
+    public PaperweightLazyCompoundTag(Supplier<net.minecraft.nbt.NBTTagCompound> compoundTagSupplier) {
         super(new HashMap<>());
         this.compoundTagSupplier = compoundTagSupplier;
     }
 
-    public PaperweightLazyCompoundTag(net.minecraft.nbt.CompoundTag compoundTag) {
+    public PaperweightLazyCompoundTag(net.minecraft.nbt.NBTTagCompound compoundTag) {
         this(() -> compoundTag);
     }
 
-    public net.minecraft.nbt.CompoundTag get() {
+    public net.minecraft.nbt.NBTTagCompound get() {
         return compoundTagSupplier.get();
     }
 
@@ -66,8 +66,8 @@ public class PaperweightLazyCompoundTag extends LazyCompoundTag {
     }
 
     public double asDouble(String key) {
-        net.minecraft.nbt.Tag tag = compoundTagSupplier.get().get(key);
-        if (tag instanceof NumericTag numTag) {
+        net.minecraft.nbt.NBTBase tag = compoundTagSupplier.get().get(key);
+        if (tag instanceof NBTNumber numTag) {
             return numTag.getAsDouble();
         }
         return 0;
@@ -86,8 +86,8 @@ public class PaperweightLazyCompoundTag extends LazyCompoundTag {
     }
 
     public int asInt(String key) {
-        net.minecraft.nbt.Tag tag = compoundTagSupplier.get().get(key);
-        if (tag instanceof NumericTag numTag) {
+        net.minecraft.nbt.NBTBase tag = compoundTagSupplier.get().get(key);
+        if (tag instanceof NBTNumber numTag) {
             return numTag.getAsInt();
         }
         return 0;
@@ -95,11 +95,11 @@ public class PaperweightLazyCompoundTag extends LazyCompoundTag {
 
     @SuppressWarnings("unchecked")
     public List<Tag> getList(String key) {
-        net.minecraft.nbt.Tag tag = compoundTagSupplier.get().get(key);
-        if (tag instanceof net.minecraft.nbt.ListTag nbtList) {
+        net.minecraft.nbt.NBTBase tag = compoundTagSupplier.get().get(key);
+        if (tag instanceof net.minecraft.nbt.NBTTagList nbtList) {
             ArrayList<Tag> list = new ArrayList<>();
-            for (net.minecraft.nbt.Tag elem : nbtList) {
-                if (elem instanceof net.minecraft.nbt.CompoundTag compoundTag) {
+            for (net.minecraft.nbt.NBTBase elem : nbtList) {
+                if (elem instanceof net.minecraft.nbt.NBTTagCompound compoundTag) {
                     list.add(new PaperweightLazyCompoundTag(compoundTag));
                 } else {
                     list.add(WorldEditPlugin.getInstance().getBukkitImplAdapter().toNative(elem));
@@ -112,8 +112,8 @@ public class PaperweightLazyCompoundTag extends LazyCompoundTag {
 
     @SuppressWarnings("unchecked")
     public ListTag getListTag(String key) {
-        net.minecraft.nbt.Tag tag = compoundTagSupplier.get().get(key);
-        if (tag instanceof net.minecraft.nbt.ListTag) {
+        net.minecraft.nbt.NBTBase tag = compoundTagSupplier.get().get(key);
+        if (tag instanceof net.minecraft.nbt.NBTTagList) {
             return (ListTag) WorldEditPlugin.getInstance().getBukkitImplAdapter().toNative(tag);
         }
         return new ListTag(StringTag.class, Collections.emptyList());
@@ -138,8 +138,8 @@ public class PaperweightLazyCompoundTag extends LazyCompoundTag {
     }
 
     public long asLong(String key) {
-        net.minecraft.nbt.Tag tag = compoundTagSupplier.get().get(key);
-        if (tag instanceof NumericTag numTag) {
+        net.minecraft.nbt.NBTBase tag = compoundTagSupplier.get().get(key);
+        if (tag instanceof NBTNumber numTag) {
             return numTag.getAsLong();
         }
         return 0;
