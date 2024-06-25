@@ -16,16 +16,15 @@ import com.sk89q.worldedit.world.block.BaseBlock;
 import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockTypesCache;
 import net.minecraft.core.Holder;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.WorldServer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.biome.BiomeBase;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.DataPaletteBlock;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
 import org.apache.logging.log4j.Logger;
 
-import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,11 +42,11 @@ public class PaperweightGetBlocks_Copy implements IChunkGet {
     private final char[][] blocks;
     private final int minHeight;
     private final int maxHeight;
-    final ServerLevel serverLevel;
-    final LevelChunk levelChunk;
-    private PalettedContainer<Holder<Biome>>[] biomes = null;
+    final WorldServer serverLevel;
+    final Chunk levelChunk;
+    private DataPaletteBlock<Holder<BiomeBase>>[] biomes = null;
 
-    protected PaperweightGetBlocks_Copy(LevelChunk levelChunk) {
+    protected PaperweightGetBlocks_Copy(Chunk levelChunk) {
         this.levelChunk = levelChunk;
         this.serverLevel = levelChunk.level;
         this.minHeight = serverLevel.getMinBuildHeight();
@@ -55,7 +54,7 @@ public class PaperweightGetBlocks_Copy implements IChunkGet {
         this.blocks = new char[getSectionCount()][];
     }
 
-    protected void storeTile(BlockEntity blockEntity) {
+    protected void storeTile(TileEntity blockEntity) {
         tiles.put(
                 BlockVector3.at(
                         blockEntity.getBlockPos().getX(),
@@ -72,7 +71,6 @@ public class PaperweightGetBlocks_Copy implements IChunkGet {
     }
 
     @Override
-    @Nullable
     public CompoundTag getTile(int x, int y, int z) {
         return tiles.get(BlockVector3.at(x, y, z));
     }
@@ -144,7 +142,7 @@ public class PaperweightGetBlocks_Copy implements IChunkGet {
 
     @Override
     public BiomeType getBiomeType(int x, int y, int z) {
-        Holder<Biome> biome = biomes[(y >> 4) - getMinSectionPosition()].get(x >> 2, (y & 15) >> 2, z >> 2);
+        Holder<BiomeBase> biome = biomes[(y >> 4) - getMinSectionPosition()].get(x >> 2, (y & 15) >> 2, z >> 2);
         return PaperweightPlatformAdapter.adapt(biome, serverLevel);
     }
 
@@ -171,16 +169,16 @@ public class PaperweightGetBlocks_Copy implements IChunkGet {
         blocks[layer] = data;
     }
 
-    protected void storeBiomes(int layer, PalettedContainerRO<Holder<Biome>> biomeData) {
+    protected void storeBiomes(int layer, PalettedContainerRO<Holder<BiomeBase>> biomeData) {
         if (biomes == null) {
-            biomes = new PalettedContainer[getSectionCount()];
+            biomes = new DataPaletteBlock[getSectionCount()];
         }
-        if (biomeData instanceof PalettedContainer<Holder<Biome>> palettedContainer) {
+        if (biomeData instanceof DataPaletteBlock<Holder<BiomeBase>> palettedContainer) {
             biomes[layer] = palettedContainer.copy();
         } else {
             LOGGER.error(
                     "Cannot correctly save biomes to history. Expected class type {} but got {}",
-                    PalettedContainer.class.getSimpleName(),
+                    DataPaletteBlock.class.getSimpleName(),
                     biomeData.getClass().getSimpleName()
             );
         }

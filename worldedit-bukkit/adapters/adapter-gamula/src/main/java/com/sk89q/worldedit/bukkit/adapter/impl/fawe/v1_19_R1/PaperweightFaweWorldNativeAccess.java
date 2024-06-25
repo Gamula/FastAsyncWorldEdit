@@ -4,6 +4,7 @@ import com.fastasyncworldedit.core.Fawe;
 import com.fastasyncworldedit.core.math.IntPair;
 import com.fastasyncworldedit.core.util.TaskManager;
 import com.fastasyncworldedit.core.util.task.RunnableVal;
+import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.worldedit.bukkit.BukkitAdapter;
 import com.sk89q.worldedit.internal.block.BlockStateIdAccess;
 import com.sk89q.worldedit.internal.wna.WorldNativeAccess;
@@ -11,21 +12,20 @@ import com.sk89q.worldedit.util.SideEffect;
 import com.sk89q.worldedit.util.SideEffectSet;
 import com.sk89q.worldedit.util.nbt.CompoundBinaryTag;
 import com.sk89q.worldedit.world.block.BlockState;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.core.EnumDirection;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ChunkHolder;
+import net.minecraft.server.level.PlayerChunk;
 import net.minecraft.server.level.ChunkProviderServer;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.World;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.chunk.Chunk;
 import org.bukkit.craftbukkit.v1_19_R1.CraftWorld;
 import org.bukkit.craftbukkit.v1_19_R1.block.data.CraftBlockData;
 import org.bukkit.event.block.BlockPhysicsEvent;
 
-import javax.annotation.Nullable;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.HashSet;
@@ -33,27 +33,27 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<LevelChunk,
-        net.minecraft.world.level.block.state.BlockState, BlockPos> {
+public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Chunk,
+        net.minecraft.world.level.block.state.IBlockData, BlockPosition> {
 
     private static final int UPDATE = 1;
     private static final int NOTIFY = 2;
-    private static final Direction[] NEIGHBOUR_ORDER = {
-            Direction.EAST,
-            Direction.WEST,
-            Direction.DOWN,
-            Direction.UP,
-            Direction.NORTH,
-            Direction.SOUTH
+    private static final EnumDirection[] NEIGHBOUR_ORDER = {
+            EnumDirection.EAST,
+            EnumDirection.WEST,
+            EnumDirection.DOWN,
+            EnumDirection.UP,
+            EnumDirection.NORTH,
+            EnumDirection.SOUTH
     };
     private final PaperweightFaweAdapter paperweightFaweAdapter;
-    private final WeakReference<Level> level;
+    private final WeakReference<World> level;
     private final AtomicInteger lastTick;
     private final Set<CachedChange> cachedChanges = new HashSet<>();
     private final Set<IntPair> cachedChunksToSend = new HashSet<>();
     private SideEffectSet sideEffectSet;
 
-    public PaperweightFaweWorldNativeAccess(PaperweightFaweAdapter paperweightFaweAdapter, WeakReference<Level> level) {
+    public PaperweightFaweWorldNativeAccess(PaperweightFaweAdapter paperweightFaweAdapter, WeakReference<World> level) {
         this.paperweightFaweAdapter = paperweightFaweAdapter;
         this.level = level;
         // Use the actual tick as minecraft-defined so we don't try to force blocks into the world when the server's already lagging.
@@ -61,7 +61,7 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
         this.lastTick = new AtomicInteger(MinecraftServer.currentTick);
     }
 
-    private Level getLevel() {
+    private World getLevel() {
         return Objects.requireNonNull(level.get(), "The reference to the world was lost");
     }
 
@@ -71,12 +71,12 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     }
 
     @Override
-    public LevelChunk getChunk(int x, int z) {
+    public Chunk getChunk(int x, int z) {
         return getLevel().getChunk(x, z);
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState toNative(BlockState blockState) {
+    public net.minecraft.world.level.block.state.IBlockData toNative(BlockState blockState) {
         int stateId = paperweightFaweAdapter.ordinalToIbdID(blockState.getOrdinalChar());
         return BlockStateIdAccess.isValidInternalId(stateId)
                 ? Block.stateById(stateId)
@@ -84,15 +84,14 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState getBlockState(LevelChunk levelChunk, BlockPos blockPos) {
+    public net.minecraft.world.level.block.state.IBlockData getBlockState(Chunk levelChunk, BlockPosition blockPos) {
         return levelChunk.getBlockState(blockPos);
     }
 
-    @Nullable
     @Override
-    public synchronized net.minecraft.world.level.block.state.BlockState setBlockState(
-            LevelChunk levelChunk, BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState blockState
+    public synchronized net.minecraft.world.level.block.state.IBlockData setBlockState(
+            Chunk levelChunk, BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData blockState
     ) {
         int currentTick = MinecraftServer.currentTick;
         if (Fawe.isMainThread()) {
@@ -114,41 +113,41 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState getValidBlockForPosition(
-            net.minecraft.world.level.block.state.BlockState blockState,
-            BlockPos blockPos
+    public net.minecraft.world.level.block.state.IBlockData getValidBlockForPosition(
+            net.minecraft.world.level.block.state.IBlockData blockState,
+            BlockPosition blockPos
     ) {
         return Block.updateFromNeighbourShapes(blockState, getLevel(), blockPos);
     }
 
     @Override
-    public BlockPos getPosition(int x, int y, int z) {
-        return new BlockPos(x, y, z);
+    public BlockPosition getPosition(int x, int y, int z) {
+        return new BlockPosition(x, y, z);
     }
 
     @Override
-    public void updateLightingForBlock(BlockPos blockPos) {
+    public void updateLightingForBlock(BlockPosition blockPos) {
         getLevel().getChunkSource().getLightEngine().checkBlock(blockPos);
     }
 
     @Override
-    public boolean updateTileEntity(BlockPos blockPos, CompoundBinaryTag tag) {
+    public boolean updateTileEntity(BlockPosition blockPos, CompoundBinaryTag tag) {
         // We will assume that the tile entity was created for us,
         // though we do not do this on the other versions
-        BlockEntity blockEntity = getLevel().getBlockEntity(blockPos);
+        TileEntity blockEntity = getLevel().getBlockEntity(blockPos);
         if (blockEntity == null) {
             return false;
         }
         net.minecraft.nbt.NBTBase nativeTag = paperweightFaweAdapter.fromNativeBinary(tag);
-        blockEntity.load((CompoundTag) nativeTag);
+        blockEntity.load((NBTTagCompound) nativeTag);
         return true;
     }
 
     @Override
     public void notifyBlockUpdate(
-            LevelChunk levelChunk, BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState oldState,
-            net.minecraft.world.level.block.state.BlockState newState
+            Chunk levelChunk, BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData oldState,
+            net.minecraft.world.level.block.state.IBlockData newState
     ) {
         if (levelChunk.getSections()[level.get().getSectionIndex(blockPos.getY())] != null) {
             getLevel().sendBlockUpdated(blockPos, oldState, newState, UPDATE | NOTIFY);
@@ -156,12 +155,12 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     }
 
     @Override
-    public boolean isChunkTicking(LevelChunk levelChunk) {
-        return levelChunk.getFullStatus().isOrAfter(ChunkHolder.FullChunkStatus.TICKING);
+    public boolean isChunkTicking(Chunk levelChunk) {
+        return levelChunk.getFullStatus().isOrAfter(PlayerChunk.State.TICKING);
     }
 
     @Override
-    public void markBlockChanged(LevelChunk levelChunk, BlockPos blockPos) {
+    public void markBlockChanged(Chunk levelChunk, BlockPosition blockPos) {
         if (levelChunk.getSections()[level.get().getSectionIndex(blockPos.getY())] != null) {
             ((ChunkProviderServer) getLevel().getChunkSource()).blockChanged(blockPos);
         }
@@ -169,18 +168,18 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
 
     @Override
     public void notifyNeighbors(
-            BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState oldState,
-            net.minecraft.world.level.block.state.BlockState newState
+            BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData oldState,
+            net.minecraft.world.level.block.state.IBlockData newState
     ) {
-        Level level = getLevel();
+        World level = getLevel();
         if (sideEffectSet.shouldApply(SideEffect.EVENTS)) {
             level.blockUpdated(blockPos, oldState.getBlock());
         } else {
             // When we don't want events, manually run the physics without them.
             // Un-nest neighbour updating
-            for (Direction direction : NEIGHBOUR_ORDER) {
-                BlockPos shifted = blockPos.relative(direction);
+            for (EnumDirection direction : NEIGHBOUR_ORDER) {
+                BlockPosition shifted = blockPos.relative(direction);
                 level.getBlockState(shifted).neighborChanged(level, shifted, oldState.getBlock(), blockPos, false);
             }
         }
@@ -191,12 +190,12 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
 
     @Override
     public void updateNeighbors(
-            BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState oldState,
-            net.minecraft.world.level.block.state.BlockState newState,
+            BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData oldState,
+            net.minecraft.world.level.block.state.IBlockData newState,
             int recursionLimit
     ) {
-        Level level = getLevel();
+        World level = getLevel();
         // a == updateNeighbors
         // b == updateDiagonalNeighbors
         oldState.updateIndirectNeighbourShapes(level, blockPos, NOTIFY, recursionLimit);
@@ -219,9 +218,9 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
 
     @Override
     public void onBlockStateChange(
-            BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState oldState,
-            net.minecraft.world.level.block.state.BlockState newState
+            BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData oldState,
+            net.minecraft.world.level.block.state.IBlockData newState
     ) {
         getLevel().onBlockStateChange(blockPos, oldState, newState);
     }
@@ -276,9 +275,9 @@ public class PaperweightFaweWorldNativeAccess implements WorldNativeAccess<Level
     }
 
     private record CachedChange(
-            LevelChunk levelChunk,
-            BlockPos blockPos,
-            net.minecraft.world.level.block.state.BlockState blockState
+            Chunk levelChunk,
+            BlockPosition blockPos,
+            net.minecraft.world.level.block.state.IBlockData blockState
     ) {
 
     }

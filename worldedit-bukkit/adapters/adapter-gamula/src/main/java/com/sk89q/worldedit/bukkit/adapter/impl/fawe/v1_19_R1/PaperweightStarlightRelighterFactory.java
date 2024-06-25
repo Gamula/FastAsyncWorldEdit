@@ -9,12 +9,10 @@ import com.sk89q.worldedit.world.World;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_19_R1.CraftWorld;
 
-import javax.annotation.Nonnull;
-
 public class PaperweightStarlightRelighterFactory implements RelighterFactory {
 
     @Override
-    public @Nonnull Relighter createRelighter(RelightMode relightMode, World world, IQueueExtent<?> queue) {
+    public Relighter createRelighter(RelightMode relightMode, World world, IQueueExtent<?> queue) {
         org.bukkit.World w = Bukkit.getWorld(world.getName());
         if (w == null) {
             return NullRelighter.INSTANCE;

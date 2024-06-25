@@ -29,40 +29,39 @@ import com.sk89q.worldedit.world.biome.BiomeTypes;
 import com.sk89q.worldedit.world.block.BlockTypesCache;
 import io.papermc.lib.PaperLib;
 import io.papermc.paper.event.block.BeaconDeactivatedEvent;
-import net.minecraft.core.BlockPos;
+import net.minecraft.core.BlockPosition;
 import net.minecraft.core.Holder;
-import net.minecraft.core.IdMap;
+import net.minecraft.core.IRegistry;
 import net.minecraft.core.Registry;
-import net.minecraft.core.SectionPos;
-import net.minecraft.nbt.IntTag;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.util.BitStorage;
+import net.minecraft.core.SectionPosition;
+import net.minecraft.nbt.NBTTagInt;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.sounds.SoundEffects;
+import net.minecraft.util.DataBits;
 import net.minecraft.util.ZeroBitStorage;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.LightLayer;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.block.entity.BeaconBlockEntity;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.DataLayer;
-import net.minecraft.world.level.chunk.HashMapPalette;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.LinearPalette;
-import net.minecraft.world.level.chunk.Palette;
-import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.level.EnumSkyBlock;
+import net.minecraft.world.level.biome.BiomeBase;
+import net.minecraft.world.level.block.entity.TileEntityBeacon;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.block.state.IBlockData;
+import net.minecraft.world.level.chunk.DataPaletteBlock;
+import net.minecraft.world.level.chunk.NibbleArray;
+import net.minecraft.world.level.chunk.DataPaletteHash;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkSection;
+import net.minecraft.world.level.chunk.DataPaletteLinear;
+import net.minecraft.world.level.chunk.DataPalette;
 import net.minecraft.world.level.chunk.PalettedContainerRO;
-import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.lighting.LevelLightEngine;
+import net.minecraft.world.level.levelgen.HeightMap;
+import net.minecraft.world.level.lighting.LightEngine;
 import org.apache.logging.log4j.Logger;
 import org.bukkit.World;
 import org.bukkit.craftbukkit.v1_19_R1.CraftWorld;
 import org.bukkit.craftbukkit.v1_19_R1.block.CraftBlock;
 import org.bukkit.event.entity.CreatureSpawnEvent;
 
-import javax.annotation.Nonnull;
 import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,29 +87,29 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
     private static final Logger LOGGER = LogManagerCompat.getLogger();
 
-    private static final Function<BlockPos, BlockVector3> posNms2We = v -> BlockVector3.at(v.getX(), v.getY(), v.getZ());
-    private static final Function<BlockEntity, CompoundTag> nmsTile2We =
+    private static final Function<BlockPosition, BlockVector3> posNms2We = v -> BlockVector3.at(v.getX(), v.getY(), v.getZ());
+    private static final Function<TileEntity, CompoundTag> nmsTile2We =
             tileEntity -> new PaperweightLazyCompoundTag(Suppliers.memoize(tileEntity::saveWithId));
     private final PaperweightFaweAdapter adapter = ((PaperweightFaweAdapter) WorldEditPlugin
             .getInstance()
             .getBukkitImplAdapter());
     private final ReadWriteLock sectionLock = new ReentrantReadWriteLock();
     private final ReentrantLock callLock = new ReentrantLock();
-    private final ServerLevel serverLevel;
+    private final WorldServer serverLevel;
     private final int chunkX;
     private final int chunkZ;
     private final int minHeight;
     private final int maxHeight;
     private final int minSectionPosition;
     private final int maxSectionPosition;
-    private final Registry<Biome> biomeRegistry;
-    private final IdMap<Holder<Biome>> biomeHolderIdMap;
+    private final IRegistry<BiomeBase> biomeRegistry;
+    private final IRegistry<Holder<BiomeBase>> biomeHolderIdMap;
     private final ConcurrentHashMap<Integer, PaperweightGetBlocks_Copy> copies = new ConcurrentHashMap<>();
     private final Object sendLock = new Object();
-    private LevelChunkSection[] sections;
-    private LevelChunk levelChunk;
-    private DataLayer[] blockLight;
-    private DataLayer[] skyLight;
+    private ChunkSection[] sections;
+    private Chunk levelChunk;
+    private NibbleArray[] blockLight;
+    private NibbleArray[] skyLight;
     private boolean createCopy = false;
     private boolean forceLoadSections = true;
     private boolean lightUpdate = false;
@@ -120,7 +119,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         this(((CraftWorld) world).getHandle(), chunkX, chunkZ);
     }
 
-    public PaperweightGetBlocks(ServerLevel serverLevel, int chunkX, int chunkZ) {
+    public PaperweightGetBlocks(WorldServer serverLevel, int chunkX, int chunkZ) {
         super(serverLevel.getMinBuildHeight() >> 4, (serverLevel.getMaxBuildHeight() - 1) >> 4);
         this.serverLevel = serverLevel;
         this.chunkX = chunkX;
@@ -129,10 +128,10 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         this.maxHeight = serverLevel.getMaxBuildHeight() - 1; // Minecraft max limit is exclusive.
         this.minSectionPosition = minHeight >> 4;
         this.maxSectionPosition = maxHeight >> 4;
-        this.skyLight = new DataLayer[getSectionCount()];
-        this.blockLight = new DataLayer[getSectionCount()];
-        this.biomeRegistry = serverLevel.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY);
-        this.biomeHolderIdMap = biomeRegistry.asHolderIdMap();
+        this.skyLight = new NibbleArray[getSectionCount()];
+        this.blockLight = new NibbleArray[getSectionCount()];
+        this.biomeRegistry = serverLevel.registryAccess().registryOrThrow(IRegistry.BIOME_REGISTRY);
+        this.biomeHolderIdMap = (IRegistry<Holder<BiomeBase>>) biomeRegistry.asHolderIdMap();
     }
 
     public int getChunkX() {
@@ -178,7 +177,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         if (light != null) {
             lightUpdate = true;
             try {
-                fillLightNibble(light, LightLayer.BLOCK, minSectionPosition, maxSectionPosition);
+                fillLightNibble(light, EnumSkyBlock.BLOCK, minSectionPosition, maxSectionPosition);
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -190,7 +189,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         if (light != null) {
             lightUpdate = true;
             try {
-                fillLightNibble(light, LightLayer.SKY, minSectionPosition, maxSectionPosition);
+                fillLightNibble(light, EnumSkyBlock.SKY, minSectionPosition, maxSectionPosition);
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -202,8 +201,8 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         // height + 1 to match server internal
         BitArrayUnstretched bitArray = new BitArrayUnstretched(MathMan.log2nlz(getChunk().getHeight() + 1), 256);
         bitArray.fromRaw(data);
-        Heightmap.Types nativeType = Heightmap.Types.valueOf(type.name());
-        Heightmap heightMap = getChunk().heightmaps.get(nativeType);
+        HeightMap.Type nativeType = HeightMap.Type.valueOf(type.name());
+        HeightMap heightMap = getChunk().heightmaps.get(nativeType);
         heightMap.setRawData(getChunk(), nativeType, bitArray.getData());
     }
 
@@ -219,15 +218,15 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
     @Override
     public BiomeType getBiomeType(int x, int y, int z) {
-        LevelChunkSection section = getSections(false)[(y >> 4) - getMinSectionPosition()];
-        Holder<Biome> biomes = section.getNoiseBiome(x >> 2, (y & 15) >> 2, z >> 2);
+        ChunkSection section = getSections(false)[(y >> 4) - getMinSectionPosition()];
+        Holder<BiomeBase> biomes = section.getNoiseBiome(x >> 2, (y & 15) >> 2, z >> 2);
         return PaperweightPlatformAdapter.adapt(biomes, serverLevel);
     }
 
     @Override
     public void removeSectionLighting(int layer, boolean sky) {
-        SectionPos sectionPos = SectionPos.of(getChunk().getPos(), layer);
-        DataLayer dataLayer = serverLevel.getChunkSource().getLightEngine().getLayerListener(LightLayer.BLOCK).getDataLayerData(
+        SectionPosition sectionPos = SectionPosition.of(getChunk().getPos(), layer);
+        NibbleArray dataLayer = serverLevel.getChunkSource().getLightEngine().getLayerListener(EnumSkyBlock.BLOCK).getDataLayerData(
                 sectionPos);
         if (dataLayer != null) {
             lightUpdate = true;
@@ -237,11 +236,11 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
             }
         }
         if (sky) {
-            SectionPos sectionPos1 = SectionPos.of(getChunk().getPos(), layer);
-            DataLayer dataLayer1 = serverLevel
+            SectionPosition sectionPos1 = SectionPosition.of(getChunk().getPos(), layer);
+            NibbleArray dataLayer1 = serverLevel
                     .getChunkSource()
                     .getLightEngine()
-                    .getLayerListener(LightLayer.SKY)
+                    .getLayerListener(EnumSkyBlock.SKY)
                     .getDataLayerData(sectionPos1);
             if (dataLayer1 != null) {
                 lightUpdate = true;
@@ -255,7 +254,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
     @Override
     public CompoundTag getTile(int x, int y, int z) {
-        BlockEntity blockEntity = getChunk().getBlockEntity(new BlockPos((x & 15) + (
+        TileEntity blockEntity = getChunk().getBlockEntity(new BlockPosition((x & 15) + (
                 chunkX << 4), y, (z & 15) + (
                 chunkZ << 4)));
         if (blockEntity == null) {
@@ -266,7 +265,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
     @Override
     public Map<BlockVector3, CompoundTag> getTiles() {
-        Map<BlockPos, BlockEntity> nmsTiles = getChunk().getBlockEntities();
+        Map<BlockPosition, TileEntity> nmsTiles = getChunk().getBlockEntities();
         if (nmsTiles.isEmpty()) {
             return Collections.emptyMap();
         }
@@ -278,17 +277,17 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         int layer = y >> 4;
         int alayer = layer - getMinSectionPosition();
         if (skyLight[alayer] == null) {
-            SectionPos sectionPos = SectionPos.of(getChunk().getPos(), layer);
-            DataLayer dataLayer =
-                    serverLevel.getChunkSource().getLightEngine().getLayerListener(LightLayer.SKY).getDataLayerData(sectionPos);
+            SectionPosition sectionPos = SectionPosition.of(getChunk().getPos(), layer);
+            NibbleArray dataLayer =
+                    serverLevel.getChunkSource().getLightEngine().getLayerListener(EnumSkyBlock.SKY).getDataLayerData(sectionPos);
             // If the server hasn't generated the section's NibbleArray yet, it will be null
             if (dataLayer == null) {
                 byte[] LAYER_COUNT = new byte[2048];
                 // Safe enough to assume if it's not created, it's under the sky. Unlikely to be created before lighting is fixed anyway.
                 Arrays.fill(LAYER_COUNT, (byte) 15);
-                dataLayer = new DataLayer(LAYER_COUNT);
-                ((LevelLightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(
-                        LightLayer.BLOCK,
+                dataLayer = new NibbleArray(LAYER_COUNT);
+                ((LightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(
+                        EnumSkyBlock.BLOCK,
                         sectionPos,
                         dataLayer,
                         true
@@ -304,20 +303,20 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         int layer = y >> 4;
         int alayer = layer - getMinSectionPosition();
         if (blockLight[alayer] == null) {
-            serverLevel.getRawBrightness(new BlockPos(1, 1, 1), 5);
-            SectionPos sectionPos = SectionPos.of(getChunk().getPos(), layer);
-            DataLayer dataLayer = serverLevel
+            serverLevel.getRawBrightness(new BlockPosition(1, 1, 1), 5);
+            SectionPosition sectionPos = SectionPosition.of(getChunk().getPos(), layer);
+            NibbleArray dataLayer = serverLevel
                     .getChunkSource()
                     .getLightEngine()
-                    .getLayerListener(LightLayer.BLOCK)
+                    .getLayerListener(EnumSkyBlock.BLOCK)
                     .getDataLayerData(sectionPos);
-            // If the server hasn't generated the section's DataLayer yet, it will be null
+            // If the server hasn't generated the section's NibbleArray yet, it will be null
             if (dataLayer == null) {
                 byte[] LAYER_COUNT = new byte[2048];
                 // Safe enough to assume if it's not created, it's under the sky. Unlikely to be created before lighting is fixed anyway.
                 Arrays.fill(LAYER_COUNT, (byte) 15);
-                dataLayer = new DataLayer(LAYER_COUNT);
-                ((LevelLightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(LightLayer.BLOCK, sectionPos,
+                dataLayer = new NibbleArray(LAYER_COUNT);
+                ((LightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(EnumSkyBlock.BLOCK, sectionPos,
                         dataLayer, true
                 );
             }
@@ -328,7 +327,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
     @Override
     public int[] getHeightMap(HeightMapType type) {
-        long[] longArray = getChunk().heightmaps.get(Heightmap.Types.valueOf(type.name())).getRawData();
+        long[] longArray = getChunk().heightmaps.get(HeightMap.Type.valueOf(type.name())).getRawData();
         BitArrayUnstretched bitArray = new BitArrayUnstretched(9, 256, longArray);
         return bitArray.toRaw(new int[256]);
     }
@@ -382,7 +381,6 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                 return false;
             }
 
-            @Nonnull
             @Override
             public Iterator<CompoundTag> iterator() {
                 Iterable<CompoundTag> result = entities.stream().map(input -> {
@@ -399,7 +397,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         entity.discard();
     }
 
-    public LevelChunk ensureLoaded(ServerLevel nmsWorld, int chunkX, int chunkZ) {
+    public Chunk ensureLoaded(WorldServer nmsWorld, int chunkX, int chunkZ) {
         return PaperweightPlatformAdapter.ensureLoaded(nmsWorld, chunkX, chunkZ);
     }
 
@@ -418,15 +416,15 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
             copies.put(copyKey, copy);
         }
         try {
-            ServerLevel nmsWorld = serverLevel;
-            LevelChunk nmsChunk = ensureLoaded(nmsWorld, chunkX, chunkZ);
+            WorldServer nmsWorld = serverLevel;
+            Chunk nmsChunk = ensureLoaded(nmsWorld, chunkX, chunkZ);
 
             // Remove existing tiles. Create a copy so that we can remove blocks
-            Map<BlockPos, BlockEntity> chunkTiles = new HashMap<>(nmsChunk.getBlockEntities());
-            List<BlockEntity> beacons = null;
+            Map<BlockPosition, TileEntity> chunkTiles = new HashMap<>(nmsChunk.getBlockEntities());
+            List<TileEntity> beacons = null;
             if (!chunkTiles.isEmpty()) {
-                for (Map.Entry<BlockPos, BlockEntity> entry : chunkTiles.entrySet()) {
-                    final BlockPos pos = entry.getKey();
+                for (Map.Entry<BlockPosition, TileEntity> entry : chunkTiles.entrySet()) {
+                    final BlockPosition pos = entry.getKey();
                     final int lx = pos.getX() & 15;
                     final int ly = pos.getY();
                     final int lz = pos.getZ() & 15;
@@ -437,8 +435,8 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
                     int ordinal = set.getBlock(lx, ly, lz).getOrdinal();
                     if (ordinal != BlockTypesCache.ReservedIDs.__RESERVED__) {
-                        BlockEntity tile = entry.getValue();
-                        if (PaperLib.isPaper() && tile instanceof BeaconBlockEntity) {
+                        TileEntity tile = entry.getValue();
+                        if (PaperLib.isPaper() && tile instanceof TileEntityBeacon) {
                             if (beacons == null) {
                                 beacons = new ArrayList<>();
                             }
@@ -457,7 +455,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
 
             int bitMask = 0;
             synchronized (nmsChunk) {
-                LevelChunkSection[] levelChunkSections = nmsChunk.getSections();
+                ChunkSection[] levelChunkSections = nmsChunk.getSections();
 
                 for (int layerNo = getMinSectionPosition(); layerNo <= getMaxSectionPosition(); layerNo++) {
 
@@ -474,17 +472,18 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                         }
                         if (biomes[setSectionIndex] != null) {
                             synchronized (super.sectionLocks[getSectionIndex]) {
-                                LevelChunkSection existingSection = levelChunkSections[getSectionIndex];
+                                ChunkSection existingSection = levelChunkSections[getSectionIndex];
                                 if (createCopy && existingSection != null) {
                                     copy.storeBiomes(getSectionIndex, existingSection.getBiomes());
                                 }
 
                                 if (existingSection == null) {
-                                    PalettedContainer<Holder<Biome>> biomeData = PaperweightPlatformAdapter.getBiomePalettedContainer(
+                                    DataPaletteBlock<Holder<BiomeBase>> biomeData =
+                                            PaperweightPlatformAdapter.getBiomePalettedContainer(
                                             biomes[setSectionIndex],
                                             biomeHolderIdMap
                                     );
-                                    LevelChunkSection newSection = PaperweightPlatformAdapter.newChunkSection(
+                                    ChunkSection newSection = PaperweightPlatformAdapter.newChunkSection(
                                             layerNo,
                                             new char[4096],
                                             adapter,
@@ -528,8 +527,8 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                     // submitted to keep loaded internal chunks to queue target size.
                     synchronized (super.sectionLocks[getSectionIndex]) {
 
-                        LevelChunkSection newSection;
-                        LevelChunkSection existingSection = levelChunkSections[getSectionIndex];
+                        ChunkSection newSection;
+                        ChunkSection existingSection = levelChunkSections[getSectionIndex];
                         // Don't attempt to tick section whilst we're editing
                         if (existingSection != null) {
                             PaperweightPlatformAdapter.clearCounts(existingSection);
@@ -549,14 +548,14 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                         }
 
                         if (existingSection == null) {
-                            PalettedContainer<Holder<Biome>> biomeData = biomes == null ? new PalettedContainer<>(
+                            DataPaletteBlock<Holder<BiomeBase>> biomeData = biomes == null ? new DataPaletteBlock<>(
                                     biomeHolderIdMap,
                                     biomeHolderIdMap.byIdOrThrow(WorldEditPlugin
                                             .getInstance()
                                             .getBukkitImplAdapter()
                                             .getInternalBiomeId(
                                                     BiomeTypes.PLAINS)),
-                                    PalettedContainer.Strategy.SECTION_BIOMES,
+                                    DataPaletteBlock.Strategy.SECTION_BIOMES,
                                     null
                             ) : PaperweightPlatformAdapter.getBiomePalettedContainer(biomes[setSectionIndex], biomeHolderIdMap);
                             newSection = PaperweightPlatformAdapter.newChunkSection(
@@ -617,7 +616,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                                 sectionLock.writeLock().unlock();
                             }
 
-                            PalettedContainer<Holder<Biome>> biomeData = setBiomesToPalettedContainer(
+                            DataPaletteBlock<Holder<BiomeBase>> biomeData = setBiomesToPalettedContainer(
                                     biomes,
                                     setSectionIndex,
                                     existingSection.getBiomes()
@@ -671,13 +670,13 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                 // Call beacon deactivate events here synchronously
                 // list will be null on spigot, so this is an implicit isPaper check
                 if (beacons != null && !beacons.isEmpty()) {
-                    final List<BlockEntity> finalBeacons = beacons;
+                    final List<TileEntity> finalBeacons = beacons;
 
                     syncTasks = new Runnable[4];
 
                     syncTasks[3] = () -> {
-                        for (BlockEntity beacon : finalBeacons) {
-                            BeaconBlockEntity.playSound(beacon.getLevel(), beacon.getBlockPos(), SoundEvents.BEACON_DEACTIVATE);
+                        for (TileEntity beacon : finalBeacons) {
+                            TileEntityBeacon.playSound(beacon.getLevel(), beacon.getBlockPos(), SoundEffects.BEACON_DEACTIVATE);
                             new BeaconDeactivatedEvent(CraftBlock.at(beacon.getLevel(), beacon.getBlockPos())).callEvent();
                         }
                     };
@@ -743,7 +742,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                             final float pitch = rotTag.getFloat(1);
                             final String id = idTag.getValue();
 
-                            EntityType<?> type = EntityType.byString(id).orElse(null);
+                            EntityTypes<?> type = EntityTypes.byString(id).orElse(null);
                             if (type != null) {
                                 Entity entity = type.create(nmsWorld);
                                 if (entity != null) {
@@ -787,10 +786,10 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                             final int x = blockHash.getX() + bx;
                             final int y = blockHash.getY();
                             final int z = blockHash.getZ() + bz;
-                            final BlockPos pos = new BlockPos(x, y, z);
+                            final BlockPosition pos = new BlockPosition(x, y, z);
 
                             synchronized (nmsWorld) {
-                                BlockEntity tileEntity = nmsWorld.getBlockEntity(pos);
+                                TileEntity tileEntity = nmsWorld.getBlockEntity(pos);
                                 if (tileEntity == null || tileEntity.isRemoved()) {
                                     nmsWorld.removeBlockEntity(pos);
                                     tileEntity = nmsWorld.getBlockEntity(pos);
@@ -798,9 +797,9 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                                 if (tileEntity != null) {
                                     final net.minecraft.nbt.NBTTagCompound tag = (net.minecraft.nbt.NBTTagCompound) adapter.fromNative(
                                             nativeTag);
-                                    tag.put("x", IntTag.valueOf(x));
-                                    tag.put("y", IntTag.valueOf(y));
-                                    tag.put("z", IntTag.valueOf(z));
+                                    tag.put("x", NBTTagInt.valueOf(x));
+                                    tag.put("y", NBTTagInt.valueOf(y));
+                                    tag.put("z", NBTTagInt.valueOf(z));
                                     tileEntity.load(tag);
                                 }
                             }
@@ -876,9 +875,9 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
     }
 
     private void updateGet(
-            LevelChunk nmsChunk,
-            LevelChunkSection[] chunkSections,
-            LevelChunkSection section,
+            Chunk nmsChunk,
+            ChunkSection[] chunkSections,
+            ChunkSection section,
             char[] arr,
             int layer
     ) {
@@ -886,17 +885,17 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
             sectionLock.writeLock().lock();
             if (this.getChunk() != nmsChunk) {
                 this.levelChunk = nmsChunk;
-                this.sections = new LevelChunkSection[chunkSections.length];
+                this.sections = new ChunkSection[chunkSections.length];
                 System.arraycopy(chunkSections, 0, this.sections, 0, chunkSections.length);
                 this.reset();
             }
             if (this.sections == null) {
-                this.sections = new LevelChunkSection[chunkSections.length];
+                this.sections = new ChunkSection[chunkSections.length];
                 System.arraycopy(chunkSections, 0, this.sections, 0, chunkSections.length);
             }
             if (this.sections[layer] != section) {
                 // Not sure why it's funky, but it's what I did in commit fda7d00747abe97d7891b80ed8bb88d97e1c70d1 and I don't want to touch it >dords
-                this.sections[layer] = new LevelChunkSection[]{section}.clone()[0];
+                this.sections[layer] = new ChunkSection[]{section}.clone()[0];
             }
         } finally {
             sectionLock.writeLock().unlock();
@@ -936,7 +935,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
     @Override
     @SuppressWarnings("unchecked")
     public char[] update(int layer, char[] data, boolean aggressive) {
-        LevelChunkSection section = getSections(aggressive)[layer];
+        ChunkSection section = getSections(aggressive)[layer];
         // Section is null, return empty array
         if (section == null) {
             data = new char[4096];
@@ -957,16 +956,16 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
             try {
                 lock.acquire();
 
-                final PalettedContainer<BlockState> blocks = section.getStates();
+                final DataPaletteBlock<IBlockData> blocks = section.getStates();
                 final Object dataObject = PaperweightPlatformAdapter.fieldData.get(blocks);
-                final BitStorage bits = (BitStorage) PaperweightPlatformAdapter.fieldStorage.get(dataObject);
+                final DataBits bits = (DataBits) PaperweightPlatformAdapter.fieldStorage.get(dataObject);
 
                 if (bits instanceof ZeroBitStorage) {
                     Arrays.fill(data, adapter.adaptToChar(blocks.get(0, 0, 0))); // get(int) is only public on paper
                     return data;
                 }
 
-                final Palette<BlockState> palette = (Palette<BlockState>) PaperweightPlatformAdapter.fieldPalette.get(dataObject);
+                final DataPalette<IBlockData> palette = (DataPalette<IBlockData>) PaperweightPlatformAdapter.fieldPalette.get(dataObject);
 
                 final int bitsPerEntry = bits.getBits();
                 final long[] blockStates = bits.getRaw();
@@ -974,7 +973,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                 new BitArrayUnstretched(bitsPerEntry, 4096, blockStates).toRaw(data);
 
                 int num_palette;
-                if (palette instanceof LinearPalette || palette instanceof HashMapPalette) {
+                if (palette instanceof DataPaletteLinear || palette instanceof DataPaletteHash) {
                     num_palette = palette.getSize();
                 } else {
                     // The section's palette is the global block palette.
@@ -1021,7 +1020,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         }
     }
 
-    private char ordinal(BlockState ibd, PaperweightFaweAdapter adapter) {
+    private char ordinal(IBlockData ibd, PaperweightFaweAdapter adapter) {
         if (ibd == null) {
             return BlockTypesCache.ReservedIDs.AIR;
         } else {
@@ -1029,16 +1028,16 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         }
     }
 
-    public LevelChunkSection[] getSections(boolean force) {
+    public ChunkSection[] getSections(boolean force) {
         force &= forceLoadSections;
-        LevelChunkSection[] tmp = sections;
+        ChunkSection[] tmp = sections;
         if (tmp == null || force) {
             try {
                 sectionLock.writeLock().lock();
                 tmp = sections;
                 if (tmp == null || force) {
-                    LevelChunkSection[] chunkSections = getChunk().getSections();
-                    tmp = new LevelChunkSection[chunkSections.length];
+                    ChunkSection[] chunkSections = getChunk().getSections();
+                    tmp = new ChunkSection[chunkSections.length];
                     System.arraycopy(chunkSections, 0, tmp, 0, chunkSections.length);
                     sections = tmp;
                 }
@@ -1049,8 +1048,8 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         return tmp;
     }
 
-    public LevelChunk getChunk() {
-        LevelChunk levelChunk = this.levelChunk;
+    public Chunk getChunk() {
+        Chunk levelChunk = this.levelChunk;
         if (levelChunk == null) {
             synchronized (this) {
                 levelChunk = this.levelChunk;
@@ -1062,19 +1061,19 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         return levelChunk;
     }
 
-    private void fillLightNibble(char[][] light, LightLayer lightLayer, int minSectionPosition, int maxSectionPosition) {
+    private void fillLightNibble(char[][] light, EnumSkyBlock lightLayer, int minSectionPosition, int maxSectionPosition) {
         for (int Y = 0; Y <= maxSectionPosition - minSectionPosition; Y++) {
             if (light[Y] == null) {
                 continue;
             }
-            SectionPos sectionPos = SectionPos.of(levelChunk.getPos(), Y + minSectionPosition);
-            DataLayer dataLayer = serverLevel.getChunkSource().getLightEngine().getLayerListener(lightLayer).getDataLayerData(
+            SectionPosition sectionPos = SectionPosition.of(levelChunk.getPos(), Y + minSectionPosition);
+            NibbleArray dataLayer = serverLevel.getChunkSource().getLightEngine().getLayerListener(lightLayer).getDataLayerData(
                     sectionPos);
             if (dataLayer == null) {
                 byte[] LAYER_COUNT = new byte[2048];
-                Arrays.fill(LAYER_COUNT, lightLayer == LightLayer.SKY ? (byte) 15 : (byte) 0);
-                dataLayer = new DataLayer(LAYER_COUNT);
-                ((LevelLightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(
+                Arrays.fill(LAYER_COUNT, lightLayer == EnumSkyBlock.SKY ? (byte) 15 : (byte) 0);
+                dataLayer = new NibbleArray(LAYER_COUNT);
+                ((LightEngine) serverLevel.getChunkSource().getLightEngine()).queueSectionData(
                         lightLayer,
                         sectionPos,
                         dataLayer,
@@ -1096,19 +1095,19 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         }
     }
 
-    private PalettedContainer<Holder<Biome>> setBiomesToPalettedContainer(
+    private DataPaletteBlock<Holder<BiomeBase>> setBiomesToPalettedContainer(
             final BiomeType[][] biomes,
             final int sectionIndex,
-            final PalettedContainerRO<Holder<Biome>> data
+            final PalettedContainerRO<Holder<BiomeBase>> data
     ) {
-        PalettedContainer<Holder<Biome>> biomeData;
-        if (data instanceof PalettedContainer<Holder<Biome>> palettedContainer) {
+        DataPaletteBlock<Holder<BiomeBase>> biomeData;
+        if (data instanceof DataPaletteBlock<Holder<BiomeBase>> palettedContainer) {
             biomeData = palettedContainer;
         } else {
             LOGGER.warn(
                     "Cannot correctly set biomes to world, existing biomes may be lost. Expected class " +
                             "type {} but got {}",
-                    PalettedContainer.class.getSimpleName(),
+                    DataPaletteBlock.class.getSimpleName(),
                     data.getClass().getSimpleName()
             );
             biomeData = data.recreate();
@@ -1148,8 +1147,8 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
     @Override
     @SuppressWarnings("unchecked")
     public synchronized boolean trim(boolean aggressive) {
-        skyLight = new DataLayer[getSectionCount()];
-        blockLight = new DataLayer[getSectionCount()];
+        skyLight = new NibbleArray[getSectionCount()];
+        blockLight = new NibbleArray[getSectionCount()];
         if (aggressive) {
             sectionLock.writeLock().lock();
             sections = null;
@@ -1165,16 +1164,16 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
                 if (!hasSection(i) || !super.sections[layer].isFull()) {
                     continue;
                 }
-                LevelChunkSection existing = getSections(true)[layer];
+                ChunkSection existing = getSections(true)[layer];
                 try {
-                    final PalettedContainer<BlockState> blocksExisting = existing.getStates();
+                    final DataPaletteBlock<IBlockData> blocksExisting = existing.getStates();
 
                     final Object dataObject = PaperweightPlatformAdapter.fieldData.get(blocksExisting);
-                    final Palette<BlockState> palette = (Palette<BlockState>) PaperweightPlatformAdapter.fieldPalette.get(
+                    final DataPalette<IBlockData> palette = (DataPalette<IBlockData>) PaperweightPlatformAdapter.fieldPalette.get(
                             dataObject);
                     int paletteSize;
 
-                    if (palette instanceof LinearPalette || palette instanceof HashMapPalette) {
+                    if (palette instanceof DataPaletteLinear || palette instanceof DataPaletteHash) {
                         paletteSize = palette.getSize();
                     } else {
                         super.trim(false, i);

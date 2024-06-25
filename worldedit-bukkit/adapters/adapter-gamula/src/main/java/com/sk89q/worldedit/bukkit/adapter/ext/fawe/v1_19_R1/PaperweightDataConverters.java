@@ -36,16 +36,16 @@ import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
 import com.sk89q.worldedit.util.nbt.CompoundBinaryTag;
-import net.minecraft.core.Direction;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.GsonHelper;
-import net.minecraft.util.StringUtil;
-import net.minecraft.util.datafix.DataFixers;
-import net.minecraft.util.datafix.fixes.References;
-import net.minecraft.world.item.DyeColor;
+import net.minecraft.core.EnumDirection;
+import net.minecraft.nbt.DynamicOpsNBT;
+import net.minecraft.network.chat.IChatBaseComponent;
+import net.minecraft.network.chat.IChatMutableComponent;
+import net.minecraft.resources.MinecraftKey;
+import net.minecraft.util.ChatDeserializer;
+import net.minecraft.util.UtilColor;
+import net.minecraft.util.datafix.DataConverterRegistry;
+import net.minecraft.util.datafix.fixes.DataConverterTypes;
+import net.minecraft.world.item.EnumColor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,7 +62,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 
 /**
  * Handles converting all Pre 1.13.2 data using the Legacy DataFix System (ported to 1.13.2)
@@ -120,7 +119,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     private String fixBlockState(String blockState, int srcVer) {
         net.minecraft.nbt.NBTTagCompound stateNBT = stateToNBT(blockState);
         Dynamic<net.minecraft.nbt.NBTBase> dynamic = new Dynamic<>(OPS_NBT, stateNBT);
-        net.minecraft.nbt.NBTTagCompound fixed = (net.minecraft.nbt.NBTTagCompound) INSTANCE.fixer.update(References.BLOCK_STATE, dynamic, srcVer, DATA_VERSION).getValue();
+        net.minecraft.nbt.NBTTagCompound fixed = (net.minecraft.nbt.NBTTagCompound) INSTANCE.fixer.update(DataConverterTypes.BLOCK_STATE, dynamic, srcVer, DATA_VERSION).getValue();
         return nbtToState(fixed);
     }
 
@@ -156,11 +155,11 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private String fixBiome(String key, int srcVer) {
-        return fixName(key, srcVer, References.BIOME);
+        return fixName(key, srcVer, DataConverterTypes.BIOME);
     }
 
     private String fixItemType(String key, int srcVer) {
-        return fixName(key, srcVer, References.ITEM_NAME);
+        return fixName(key, srcVer, DataConverterTypes.ITEM_NAME);
     }
 
     private static String fixName(String key, int srcVer, TypeReference type) {
@@ -170,7 +169,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
     private final PaperweightAdapter adapter;
 
-    private static final NbtOps OPS_NBT = NbtOps.INSTANCE;
+    private static final DynamicOpsNBT OPS_NBT = DynamicOpsNBT.INSTANCE;
     private static final int LEGACY_VERSION = 1343;
     private static int DATA_VERSION;
     static PaperweightDataConverters INSTANCE;
@@ -183,14 +182,14 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     private static final Map<String, LegacyType> DFU_TO_LEGACY = new HashMap<>();
 
     public enum LegacyType {
-        LEVEL(References.LEVEL),
-        PLAYER(References.PLAYER),
-        CHUNK(References.CHUNK),
-        BLOCK_ENTITY(References.BLOCK_ENTITY),
-        ENTITY(References.ENTITY),
-        ITEM_INSTANCE(References.ITEM_STACK),
-        OPTIONS(References.OPTIONS),
-        STRUCTURE(References.STRUCTURE);
+        LEVEL(DataConverterTypes.LEVEL),
+        PLAYER(DataConverterTypes.PLAYER),
+        CHUNK(DataConverterTypes.CHUNK),
+        BLOCK_ENTITY(DataConverterTypes.BLOCK_ENTITY),
+        ENTITY(DataConverterTypes.ENTITY),
+        ITEM_INSTANCE(DataConverterTypes.ITEM_STACK),
+        OPTIONS(DataConverterTypes.OPTIONS),
+        STRUCTURE(DataConverterTypes.STRUCTURE);
 
         private final TypeReference type;
 
@@ -217,7 +216,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     // Called after fixers are built and ready for FIXING
     @Override
     public DataFixer buildUnoptimized() {
-        return this.fixer = new WrappedDataFixer(DataFixers.getDataFixer());
+        return this.fixer = new WrappedDataFixer(DataConverterRegistry.getDataFixer());
     }
 
     @SuppressWarnings("unchecked")
@@ -463,122 +462,122 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
         registerEntityItemList(type, "ArmorItems", "HandItems");
     }
 
-    private static final Map<String, ResourceLocation> OLD_ID_TO_KEY_MAP = new HashMap<>();
+    private static final Map<String, MinecraftKey> OLD_ID_TO_KEY_MAP = new HashMap<>();
 
     static {
-        final Map<String, ResourceLocation> map = OLD_ID_TO_KEY_MAP;
-        map.put("EntityItem", new ResourceLocation("item"));
-        map.put("EntityExperienceOrb", new ResourceLocation("xp_orb"));
-        map.put("EntityAreaEffectCloud", new ResourceLocation("area_effect_cloud"));
-        map.put("EntityGuardianElder", new ResourceLocation("elder_guardian"));
-        map.put("EntitySkeletonWither", new ResourceLocation("wither_skeleton"));
-        map.put("EntitySkeletonStray", new ResourceLocation("stray"));
-        map.put("EntityEgg", new ResourceLocation("egg"));
-        map.put("EntityLeash", new ResourceLocation("leash_knot"));
-        map.put("EntityPainting", new ResourceLocation("painting"));
-        map.put("EntityTippedArrow", new ResourceLocation("arrow"));
-        map.put("EntitySnowball", new ResourceLocation("snowball"));
-        map.put("EntityLargeFireball", new ResourceLocation("fireball"));
-        map.put("EntitySmallFireball", new ResourceLocation("small_fireball"));
-        map.put("EntityEnderPearl", new ResourceLocation("ender_pearl"));
-        map.put("EntityEnderSignal", new ResourceLocation("eye_of_ender_signal"));
-        map.put("EntityPotion", new ResourceLocation("potion"));
-        map.put("EntityThrownExpBottle", new ResourceLocation("xp_bottle"));
-        map.put("EntityItemFrame", new ResourceLocation("item_frame"));
-        map.put("EntityWitherSkull", new ResourceLocation("wither_skull"));
-        map.put("EntityTNTPrimed", new ResourceLocation("tnt"));
-        map.put("EntityFallingBlock", new ResourceLocation("falling_block"));
-        map.put("EntityFireworks", new ResourceLocation("fireworks_rocket"));
-        map.put("EntityZombieHusk", new ResourceLocation("husk"));
-        map.put("EntitySpectralArrow", new ResourceLocation("spectral_arrow"));
-        map.put("EntityShulkerBullet", new ResourceLocation("shulker_bullet"));
-        map.put("EntityDragonFireball", new ResourceLocation("dragon_fireball"));
-        map.put("EntityZombieVillager", new ResourceLocation("zombie_villager"));
-        map.put("EntityHorseSkeleton", new ResourceLocation("skeleton_horse"));
-        map.put("EntityHorseZombie", new ResourceLocation("zombie_horse"));
-        map.put("EntityArmorStand", new ResourceLocation("armor_stand"));
-        map.put("EntityHorseDonkey", new ResourceLocation("donkey"));
-        map.put("EntityHorseMule", new ResourceLocation("mule"));
-        map.put("EntityEvokerFangs", new ResourceLocation("evocation_fangs"));
-        map.put("EntityEvoker", new ResourceLocation("evocation_illager"));
-        map.put("EntityVex", new ResourceLocation("vex"));
-        map.put("EntityVindicator", new ResourceLocation("vindication_illager"));
-        map.put("EntityIllagerIllusioner", new ResourceLocation("illusion_illager"));
-        map.put("EntityMinecartCommandBlock", new ResourceLocation("commandblock_minecart"));
-        map.put("EntityBoat", new ResourceLocation("boat"));
-        map.put("EntityMinecartRideable", new ResourceLocation("minecart"));
-        map.put("EntityMinecartChest", new ResourceLocation("chest_minecart"));
-        map.put("EntityMinecartFurnace", new ResourceLocation("furnace_minecart"));
-        map.put("EntityMinecartTNT", new ResourceLocation("tnt_minecart"));
-        map.put("EntityMinecartHopper", new ResourceLocation("hopper_minecart"));
-        map.put("EntityMinecartMobSpawner", new ResourceLocation("spawner_minecart"));
-        map.put("EntityCreeper", new ResourceLocation("creeper"));
-        map.put("EntitySkeleton", new ResourceLocation("skeleton"));
-        map.put("EntitySpider", new ResourceLocation("spider"));
-        map.put("EntityGiantZombie", new ResourceLocation("giant"));
-        map.put("EntityZombie", new ResourceLocation("zombie"));
-        map.put("EntitySlime", new ResourceLocation("slime"));
-        map.put("EntityGhast", new ResourceLocation("ghast"));
-        map.put("EntityPigZombie", new ResourceLocation("zombie_pigman"));
-        map.put("EntityEnderman", new ResourceLocation("enderman"));
-        map.put("EntityCaveSpider", new ResourceLocation("cave_spider"));
-        map.put("EntitySilverfish", new ResourceLocation("silverfish"));
-        map.put("EntityBlaze", new ResourceLocation("blaze"));
-        map.put("EntityMagmaCube", new ResourceLocation("magma_cube"));
-        map.put("EntityEnderDragon", new ResourceLocation("ender_dragon"));
-        map.put("EntityWither", new ResourceLocation("wither"));
-        map.put("EntityBat", new ResourceLocation("bat"));
-        map.put("EntityWitch", new ResourceLocation("witch"));
-        map.put("EntityEndermite", new ResourceLocation("endermite"));
-        map.put("EntityGuardian", new ResourceLocation("guardian"));
-        map.put("EntityShulker", new ResourceLocation("shulker"));
-        map.put("EntityPig", new ResourceLocation("pig"));
-        map.put("EntitySheep", new ResourceLocation("sheep"));
-        map.put("EntityCow", new ResourceLocation("cow"));
-        map.put("EntityChicken", new ResourceLocation("chicken"));
-        map.put("EntitySquid", new ResourceLocation("squid"));
-        map.put("EntityWolf", new ResourceLocation("wolf"));
-        map.put("EntityMushroomCow", new ResourceLocation("mooshroom"));
-        map.put("EntitySnowman", new ResourceLocation("snowman"));
-        map.put("EntityOcelot", new ResourceLocation("ocelot"));
-        map.put("EntityIronGolem", new ResourceLocation("villager_golem"));
-        map.put("EntityHorse", new ResourceLocation("horse"));
-        map.put("EntityRabbit", new ResourceLocation("rabbit"));
-        map.put("EntityPolarBear", new ResourceLocation("polar_bear"));
-        map.put("EntityLlama", new ResourceLocation("llama"));
-        map.put("EntityLlamaSpit", new ResourceLocation("llama_spit"));
-        map.put("EntityParrot", new ResourceLocation("parrot"));
-        map.put("EntityVillager", new ResourceLocation("villager"));
-        map.put("EntityEnderCrystal", new ResourceLocation("ender_crystal"));
-        map.put("TileEntityFurnace", new ResourceLocation("furnace"));
-        map.put("TileEntityChest", new ResourceLocation("chest"));
-        map.put("TileEntityEnderChest", new ResourceLocation("ender_chest"));
-        map.put("TileEntityRecordPlayer", new ResourceLocation("jukebox"));
-        map.put("TileEntityDispenser", new ResourceLocation("dispenser"));
-        map.put("TileEntityDropper", new ResourceLocation("dropper"));
-        map.put("TileEntitySign", new ResourceLocation("sign"));
-        map.put("TileEntityMobSpawner", new ResourceLocation("mob_spawner"));
-        map.put("TileEntityNote", new ResourceLocation("noteblock"));
-        map.put("TileEntityPiston", new ResourceLocation("piston"));
-        map.put("TileEntityBrewingStand", new ResourceLocation("brewing_stand"));
-        map.put("TileEntityEnchantTable", new ResourceLocation("enchanting_table"));
-        map.put("TileEntityEnderPortal", new ResourceLocation("end_portal"));
-        map.put("TileEntityBeacon", new ResourceLocation("beacon"));
-        map.put("TileEntitySkull", new ResourceLocation("skull"));
-        map.put("TileEntityLightDetector", new ResourceLocation("daylight_detector"));
-        map.put("TileEntityHopper", new ResourceLocation("hopper"));
-        map.put("TileEntityComparator", new ResourceLocation("comparator"));
-        map.put("TileEntityFlowerPot", new ResourceLocation("flower_pot"));
-        map.put("TileEntityBanner", new ResourceLocation("banner"));
-        map.put("TileEntityStructure", new ResourceLocation("structure_block"));
-        map.put("TileEntityEndGateway", new ResourceLocation("end_gateway"));
-        map.put("TileEntityCommand", new ResourceLocation("command_block"));
-        map.put("TileEntityShulkerBox", new ResourceLocation("shulker_box"));
-        map.put("TileEntityBed", new ResourceLocation("bed"));
+        final Map<String, MinecraftKey> map = OLD_ID_TO_KEY_MAP;
+        map.put("EntityItem", new MinecraftKey("item"));
+        map.put("EntityExperienceOrb", new MinecraftKey("xp_orb"));
+        map.put("EntityAreaEffectCloud", new MinecraftKey("area_effect_cloud"));
+        map.put("EntityGuardianElder", new MinecraftKey("elder_guardian"));
+        map.put("EntitySkeletonWither", new MinecraftKey("wither_skeleton"));
+        map.put("EntitySkeletonStray", new MinecraftKey("stray"));
+        map.put("EntityEgg", new MinecraftKey("egg"));
+        map.put("EntityLeash", new MinecraftKey("leash_knot"));
+        map.put("EntityPainting", new MinecraftKey("painting"));
+        map.put("EntityTippedArrow", new MinecraftKey("arrow"));
+        map.put("EntitySnowball", new MinecraftKey("snowball"));
+        map.put("EntityLargeFireball", new MinecraftKey("fireball"));
+        map.put("EntitySmallFireball", new MinecraftKey("small_fireball"));
+        map.put("EntityEnderPearl", new MinecraftKey("ender_pearl"));
+        map.put("EntityEnderSignal", new MinecraftKey("eye_of_ender_signal"));
+        map.put("EntityPotion", new MinecraftKey("potion"));
+        map.put("EntityThrownExpBottle", new MinecraftKey("xp_bottle"));
+        map.put("EntityItemFrame", new MinecraftKey("item_frame"));
+        map.put("EntityWitherSkull", new MinecraftKey("wither_skull"));
+        map.put("EntityTNTPrimed", new MinecraftKey("tnt"));
+        map.put("EntityFallingBlock", new MinecraftKey("falling_block"));
+        map.put("EntityFireworks", new MinecraftKey("fireworks_rocket"));
+        map.put("EntityZombieHusk", new MinecraftKey("husk"));
+        map.put("EntitySpectralArrow", new MinecraftKey("spectral_arrow"));
+        map.put("EntityShulkerBullet", new MinecraftKey("shulker_bullet"));
+        map.put("EntityDragonFireball", new MinecraftKey("dragon_fireball"));
+        map.put("EntityZombieVillager", new MinecraftKey("zombie_villager"));
+        map.put("EntityHorseSkeleton", new MinecraftKey("skeleton_horse"));
+        map.put("EntityHorseZombie", new MinecraftKey("zombie_horse"));
+        map.put("EntityArmorStand", new MinecraftKey("armor_stand"));
+        map.put("EntityHorseDonkey", new MinecraftKey("donkey"));
+        map.put("EntityHorseMule", new MinecraftKey("mule"));
+        map.put("EntityEvokerFangs", new MinecraftKey("evocation_fangs"));
+        map.put("EntityEvoker", new MinecraftKey("evocation_illager"));
+        map.put("EntityVex", new MinecraftKey("vex"));
+        map.put("EntityVindicator", new MinecraftKey("vindication_illager"));
+        map.put("EntityIllagerIllusioner", new MinecraftKey("illusion_illager"));
+        map.put("EntityMinecartCommandBlock", new MinecraftKey("commandblock_minecart"));
+        map.put("EntityBoat", new MinecraftKey("boat"));
+        map.put("EntityMinecartRideable", new MinecraftKey("minecart"));
+        map.put("EntityMinecartChest", new MinecraftKey("chest_minecart"));
+        map.put("EntityMinecartFurnace", new MinecraftKey("furnace_minecart"));
+        map.put("EntityMinecartTNT", new MinecraftKey("tnt_minecart"));
+        map.put("EntityMinecartHopper", new MinecraftKey("hopper_minecart"));
+        map.put("EntityMinecartMobSpawner", new MinecraftKey("spawner_minecart"));
+        map.put("EntityCreeper", new MinecraftKey("creeper"));
+        map.put("EntitySkeleton", new MinecraftKey("skeleton"));
+        map.put("EntitySpider", new MinecraftKey("spider"));
+        map.put("EntityGiantZombie", new MinecraftKey("giant"));
+        map.put("EntityZombie", new MinecraftKey("zombie"));
+        map.put("EntitySlime", new MinecraftKey("slime"));
+        map.put("EntityGhast", new MinecraftKey("ghast"));
+        map.put("EntityPigZombie", new MinecraftKey("zombie_pigman"));
+        map.put("EntityEnderman", new MinecraftKey("enderman"));
+        map.put("EntityCaveSpider", new MinecraftKey("cave_spider"));
+        map.put("EntitySilverfish", new MinecraftKey("silverfish"));
+        map.put("EntityBlaze", new MinecraftKey("blaze"));
+        map.put("EntityMagmaCube", new MinecraftKey("magma_cube"));
+        map.put("EntityEnderDragon", new MinecraftKey("ender_dragon"));
+        map.put("EntityWither", new MinecraftKey("wither"));
+        map.put("EntityBat", new MinecraftKey("bat"));
+        map.put("EntityWitch", new MinecraftKey("witch"));
+        map.put("EntityEndermite", new MinecraftKey("endermite"));
+        map.put("EntityGuardian", new MinecraftKey("guardian"));
+        map.put("EntityShulker", new MinecraftKey("shulker"));
+        map.put("EntityPig", new MinecraftKey("pig"));
+        map.put("EntitySheep", new MinecraftKey("sheep"));
+        map.put("EntityCow", new MinecraftKey("cow"));
+        map.put("EntityChicken", new MinecraftKey("chicken"));
+        map.put("EntitySquid", new MinecraftKey("squid"));
+        map.put("EntityWolf", new MinecraftKey("wolf"));
+        map.put("EntityMushroomCow", new MinecraftKey("mooshroom"));
+        map.put("EntitySnowman", new MinecraftKey("snowman"));
+        map.put("EntityOcelot", new MinecraftKey("ocelot"));
+        map.put("EntityIronGolem", new MinecraftKey("villager_golem"));
+        map.put("EntityHorse", new MinecraftKey("horse"));
+        map.put("EntityRabbit", new MinecraftKey("rabbit"));
+        map.put("EntityPolarBear", new MinecraftKey("polar_bear"));
+        map.put("EntityLlama", new MinecraftKey("llama"));
+        map.put("EntityLlamaSpit", new MinecraftKey("llama_spit"));
+        map.put("EntityParrot", new MinecraftKey("parrot"));
+        map.put("EntityVillager", new MinecraftKey("villager"));
+        map.put("EntityEnderCrystal", new MinecraftKey("ender_crystal"));
+        map.put("TileEntityFurnace", new MinecraftKey("furnace"));
+        map.put("TileEntityChest", new MinecraftKey("chest"));
+        map.put("TileEntityEnderChest", new MinecraftKey("ender_chest"));
+        map.put("TileEntityRecordPlayer", new MinecraftKey("jukebox"));
+        map.put("TileEntityDispenser", new MinecraftKey("dispenser"));
+        map.put("TileEntityDropper", new MinecraftKey("dropper"));
+        map.put("TileEntitySign", new MinecraftKey("sign"));
+        map.put("TileEntityMobSpawner", new MinecraftKey("mob_spawner"));
+        map.put("TileEntityNote", new MinecraftKey("noteblock"));
+        map.put("TileEntityPiston", new MinecraftKey("piston"));
+        map.put("TileEntityBrewingStand", new MinecraftKey("brewing_stand"));
+        map.put("TileEntityEnchantTable", new MinecraftKey("enchanting_table"));
+        map.put("TileEntityEnderPortal", new MinecraftKey("end_portal"));
+        map.put("TileEntityBeacon", new MinecraftKey("beacon"));
+        map.put("TileEntitySkull", new MinecraftKey("skull"));
+        map.put("TileEntityLightDetector", new MinecraftKey("daylight_detector"));
+        map.put("TileEntityHopper", new MinecraftKey("hopper"));
+        map.put("TileEntityComparator", new MinecraftKey("comparator"));
+        map.put("TileEntityFlowerPot", new MinecraftKey("flower_pot"));
+        map.put("TileEntityBanner", new MinecraftKey("banner"));
+        map.put("TileEntityStructure", new MinecraftKey("structure_block"));
+        map.put("TileEntityEndGateway", new MinecraftKey("end_gateway"));
+        map.put("TileEntityCommand", new MinecraftKey("command_block"));
+        map.put("TileEntityShulkerBox", new MinecraftKey("shulker_box"));
+        map.put("TileEntityBed", new MinecraftKey("bed"));
     }
 
-    private static ResourceLocation getKey(String type) {
-        final ResourceLocation key = OLD_ID_TO_KEY_MAP.get(type);
+    private static MinecraftKey getKey(String type) {
+        final MinecraftKey key = OLD_ID_TO_KEY_MAP.get(type);
         if (key == null) {
             throw new IllegalArgumentException("Unknown mapping for " + type);
         }
@@ -671,9 +670,8 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
         DataInspectorBlockEntity() {
         }
 
-        @Nullable
         private static String convertEntityId(int i, String s) {
-            String key = new ResourceLocation(s).toString();
+            String key = new MinecraftKey(s).toString();
             if (i < 515 && DataInspectorBlockEntity.b.containsKey(key)) {
                 return DataInspectorBlockEntity.b.get(key);
             } else {
@@ -846,14 +844,14 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
     private abstract static class DataInspectorTagged implements DataInspector {
 
-        private final ResourceLocation key;
+        private final MinecraftKey key;
 
         DataInspectorTagged(String type) {
             this.key = getKey(type);
         }
 
         public net.minecraft.nbt.NBTTagCompound inspect(net.minecraft.nbt.NBTTagCompound cmp, int sourceVer, int targetVer) {
-            if (this.key.equals(new ResourceLocation(cmp.getString("id")))) {
+            if (this.key.equals(new MinecraftKey(cmp.getString("id")))) {
                 cmp = this.inspectChecked(cmp, sourceVer, targetVer);
             }
 
@@ -1780,19 +1778,19 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
             boolean flag1 = "ItemFrame".equals(s);
 
             if ((flag || flag1) && !cmp.contains("Facing", 99)) {
-                Direction enumdirection;
+                EnumDirection enumdirection;
 
-                if (cmp.contains("Direction", 99)) {
-                    enumdirection = Direction.from2DDataValue(cmp.getByte("Direction"));
+                if (cmp.contains("EnumDirection", 99)) {
+                    enumdirection = EnumDirection.from2DDataValue(cmp.getByte("EnumDirection"));
                     cmp.putInt("TileX", cmp.getInt("TileX") + enumdirection.getStepX());
                     cmp.putInt("TileY", cmp.getInt("TileY") + enumdirection.getStepY());
                     cmp.putInt("TileZ", cmp.getInt("TileZ") + enumdirection.getStepZ());
-                    cmp.remove("Direction");
+                    cmp.remove("EnumDirection");
                     if (flag1 && cmp.contains("ItemRotation", 99)) {
                         cmp.putByte("ItemRotation", (byte) (cmp.getByte("ItemRotation") * 2));
                     }
                 } else {
-                    enumdirection = Direction.from2DDataValue(cmp.getByte("Dir"));
+                    enumdirection = EnumDirection.from2DDataValue(cmp.getByte("Dir"));
                     cmp.remove("Dir");
                 }
 
@@ -1886,16 +1884,16 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                     for (int i = 0; i < nbttaglist.size(); ++i) {
                         String s = nbttaglist.getString(i);
-                        Component object = null;
+                        IChatBaseComponent object = null;
 
-                        if (!"null".equals(s) && !StringUtil.isNullOrEmpty(s)) {
+                        if (!"null".equals(s) && !UtilColor.isNullOrEmpty(s)) {
                             if ((s.charAt(0) != 34 || s.charAt(s.length() - 1) != 34) && (s.charAt(0) != 123 || s.charAt(s.length() - 1) != 125)) {
-                                object = Component.literal(s);
+                                object = IChatBaseComponent.literal(s);
                             } else {
                                 try {
-                                    object = GsonHelper.fromJson(DataConverterSignText.a, s, Component.class, true);
+                                    object = ChatDeserializer.fromJson(DataConverterSignText.a, s, IChatBaseComponent.class, true);
                                     if (object == null) {
-                                        object = Component.literal("");
+                                        object = IChatBaseComponent.literal("");
                                     }
                                 } catch (JsonParseException jsonparseexception) {
                                     ;
@@ -1903,7 +1901,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                                 if (object == null) {
                                     try {
-                                        object = Component.Serializer.fromJson(s);
+                                        object = IChatBaseComponent.ChatSerializer.fromJson(s);
                                     } catch (JsonParseException jsonparseexception1) {
                                         ;
                                     }
@@ -1911,21 +1909,22 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                                 if (object == null) {
                                     try {
-                                        object = Component.Serializer.fromJsonLenient(s);
+                                        object = IChatBaseComponent.ChatSerializer.fromJsonLenient(s);
                                     } catch (JsonParseException jsonparseexception2) {
                                         ;
                                     }
                                 }
 
                                 if (object == null) {
-                                    object = Component.literal(s);
+                                    object = IChatBaseComponent.literal(s);
                                 }
                             }
                         } else {
-                            object = Component.literal("");
+                            object = IChatBaseComponent.literal("");
                         }
 
-                        nbttaglist.set(i, net.minecraft.nbt.StringTag.valueOf(Component.Serializer.toJson(object)));
+                        nbttaglist.set(i,
+                                net.minecraft.nbt.NBTTagString.valueOf(IChatBaseComponent.ChatSerializer.toJson(object)));
                     }
 
                     nbttagcompound1.put("pages", nbttaglist);
@@ -1938,7 +1937,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
     private static class DataConverterCookedFish implements DataConverter {
 
-        private static final ResourceLocation a = new ResourceLocation("cooked_fished");
+        private static final MinecraftKey a = new MinecraftKey("cooked_fished");
 
         DataConverterCookedFish() {
         }
@@ -1948,7 +1947,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
         }
 
         public net.minecraft.nbt.NBTTagCompound convert(net.minecraft.nbt.NBTTagCompound cmp) {
-            if (cmp.contains("id", 8) && DataConverterCookedFish.a.equals(new ResourceLocation(cmp.getString("id")))) {
+            if (cmp.contains("id", 8) && DataConverterCookedFish.a.equals(new MinecraftKey(cmp.getString("id")))) {
                 cmp.putString("id", "minecraft:cooked_fish");
             }
 
@@ -2490,7 +2489,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
         public net.minecraft.nbt.NBTTagCompound convert(net.minecraft.nbt.NBTTagCompound cmp) {
             if ("minecraft:bed".equals(cmp.getString("id")) && cmp.getShort("Damage") == 0) {
-                cmp.putShort("Damage", (short) DyeColor.RED.getId());
+                cmp.putShort("Damage", (short) EnumColor.RED.getId());
             }
 
             return cmp;
@@ -2499,18 +2498,18 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
     private static class DataConverterSignText implements DataConverter {
 
-        public static final Gson a = new GsonBuilder().registerTypeAdapter(Component.class, new JsonDeserializer() {
-            MutableComponent a(JsonElement jsonelement, Type type, JsonDeserializationContext jsondeserializationcontext) throws JsonParseException {
+        public static final Gson a = new GsonBuilder().registerTypeAdapter(IChatBaseComponent.class, new JsonDeserializer() {
+            IChatMutableComponent a(JsonElement jsonelement, Type type, JsonDeserializationContext jsondeserializationcontext) throws JsonParseException {
                 if (jsonelement.isJsonPrimitive()) {
-                    return Component.literal(jsonelement.getAsString());
+                    return IChatBaseComponent.literal(jsonelement.getAsString());
                 } else if (jsonelement.isJsonArray()) {
                     JsonArray jsonarray = jsonelement.getAsJsonArray();
-                    MutableComponent ichatbasecomponent = null;
+                    IChatMutableComponent ichatbasecomponent = null;
                     Iterator iterator = jsonarray.iterator();
 
                     while (iterator.hasNext()) {
                         JsonElement jsonelement1 = (JsonElement) iterator.next();
-                        MutableComponent ichatbasecomponent1 = this.a(jsonelement1, jsonelement1.getClass(), jsondeserializationcontext);
+                        IChatMutableComponent ichatbasecomponent1 = this.a(jsonelement1, jsonelement1.getClass(), jsondeserializationcontext);
 
                         if (ichatbasecomponent == null) {
                             ichatbasecomponent = ichatbasecomponent1;
@@ -2521,7 +2520,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                     return ichatbasecomponent;
                 } else {
-                    throw new JsonParseException("Don't know how to turn " + jsonelement + " into a Component");
+                    throw new JsonParseException("Don't know how to turn " + jsonelement + " into a IChatBaseComponent");
                 }
             }
 
@@ -2550,16 +2549,16 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
         private void convert(net.minecraft.nbt.NBTTagCompound nbttagcompound, String s) {
             String s1 = nbttagcompound.getString(s);
-            Component object = null;
+            IChatBaseComponent object = null;
 
-            if (!"null".equals(s1) && !StringUtil.isNullOrEmpty(s1)) {
+            if (!"null".equals(s1) && !UtilColor.isNullOrEmpty(s1)) {
                 if ((s1.charAt(0) != 34 || s1.charAt(s1.length() - 1) != 34) && (s1.charAt(0) != 123 || s1.charAt(s1.length() - 1) != 125)) {
-                    object = Component.literal(s1);
+                    object = IChatBaseComponent.literal(s1);
                 } else {
                     try {
-                        object = GsonHelper.fromJson(DataConverterSignText.a, s1, Component.class, true);
+                        object = ChatDeserializer.fromJson(DataConverterSignText.a, s1, IChatBaseComponent.class, true);
                         if (object == null) {
-                            object = Component.literal("");
+                            object = IChatBaseComponent.literal("");
                         }
                     } catch (JsonParseException jsonparseexception) {
                         ;
@@ -2567,7 +2566,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                     if (object == null) {
                         try {
-                            object = Component.Serializer.fromJson(s1);
+                            object = IChatBaseComponent.ChatSerializer.fromJson(s1);
                         } catch (JsonParseException jsonparseexception1) {
                             ;
                         }
@@ -2575,21 +2574,21 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                     if (object == null) {
                         try {
-                            object = Component.Serializer.fromJsonLenient(s1);
+                            object = IChatBaseComponent.ChatSerializer.fromJsonLenient(s1);
                         } catch (JsonParseException jsonparseexception2) {
                             ;
                         }
                     }
 
                     if (object == null) {
-                        object = Component.literal(s1);
+                        object = IChatBaseComponent.literal(s1);
                     }
                 }
             } else {
-                object = Component.literal("");
+                object = IChatBaseComponent.literal("");
             }
 
-            nbttagcompound.putString(s, Component.Serializer.toJson(object));
+            nbttagcompound.putString(s, IChatBaseComponent.ChatSerializer.toJson(object));
         }
     }
 
@@ -2714,11 +2713,11 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private static class DataInspectorVillagers implements DataInspector {
-        ResourceLocation entityVillager = getKey("EntityVillager");
+        MinecraftKey entityVillager = getKey("EntityVillager");
 
         @Override
         public net.minecraft.nbt.NBTTagCompound inspect(net.minecraft.nbt.NBTTagCompound cmp, int sourceVer, int targetVer) {
-            if (entityVillager.equals(new ResourceLocation(cmp.getString("id"))) && cmp.contains("Offers", 10)) {
+            if (entityVillager.equals(new MinecraftKey(cmp.getString("id"))) && cmp.contains("Offers", 10)) {
                 net.minecraft.nbt.NBTTagCompound nbttagcompound1 = cmp.getCompound("Offers");
 
                 if (nbttagcompound1.contains("Recipes", 9)) {
@@ -2740,13 +2739,13 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private static class DataInspectorMobSpawnerMinecart implements DataInspector {
-        ResourceLocation entityMinecartMobSpawner = getKey("EntityMinecartMobSpawner");
-        ResourceLocation tileEntityMobSpawner = getKey("TileEntityMobSpawner");
+        MinecraftKey entityMinecartMobSpawner = getKey("EntityMinecartMobSpawner");
+        MinecraftKey tileEntityMobSpawner = getKey("TileEntityMobSpawner");
 
         @Override
         public net.minecraft.nbt.NBTTagCompound inspect(net.minecraft.nbt.NBTTagCompound cmp, int sourceVer, int targetVer) {
             String s = cmp.getString("id");
-            if (entityMinecartMobSpawner.equals(new ResourceLocation(s))) {
+            if (entityMinecartMobSpawner.equals(new MinecraftKey(s))) {
                 cmp.putString("id", tileEntityMobSpawner.toString());
                 convert(LegacyType.BLOCK_ENTITY, cmp, sourceVer, targetVer);
                 cmp.putString("id", s);
@@ -2757,11 +2756,11 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private static class DataInspectorMobSpawnerMobs implements DataInspector {
-        ResourceLocation tileEntityMobSpawner = getKey("TileEntityMobSpawner");
+        MinecraftKey tileEntityMobSpawner = getKey("TileEntityMobSpawner");
 
         @Override
         public net.minecraft.nbt.NBTTagCompound inspect(net.minecraft.nbt.NBTTagCompound cmp, int sourceVer, int targetVer) {
-            if (tileEntityMobSpawner.equals(new ResourceLocation(cmp.getString("id")))) {
+            if (tileEntityMobSpawner.equals(new MinecraftKey(cmp.getString("id")))) {
                 if (cmp.contains("SpawnPotentials", 9)) {
                     net.minecraft.nbt.NBTTagList nbttaglist = cmp.getList("SpawnPotentials", 10);
 
@@ -2780,11 +2779,11 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private static class DataInspectorCommandBlock implements DataInspector {
-        ResourceLocation tileEntityCommand = getKey("TileEntityCommand");
+        MinecraftKey tileEntityCommand = getKey("TileEntityCommand");
 
         @Override
         public net.minecraft.nbt.NBTTagCompound inspect(net.minecraft.nbt.NBTTagCompound cmp, int sourceVer, int targetVer) {
-            if (tileEntityCommand.equals(new ResourceLocation(cmp.getString("id")))) {
+            if (tileEntityCommand.equals(new MinecraftKey(cmp.getString("id")))) {
                 cmp.putString("id", "Control");
                 convert(LegacyType.BLOCK_ENTITY, cmp, sourceVer, targetVer);
                 cmp.putString("id", "MinecartCommandBlock");

@@ -49,25 +49,26 @@ import com.sk89q.worldedit.world.entity.EntityType;
 import com.sk89q.worldedit.world.item.ItemType;
 import com.sk89q.worldedit.world.registry.BlockMaterial;
 import io.papermc.lib.PaperLib;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Registry;
-import net.minecraft.core.WritableRegistry;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.core.IRegistry;
+import net.minecraft.core.IRegistryWritable;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.MinecraftKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.dedicated.DedicatedServer;
-import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.StringRepresentable;
+import net.minecraft.server.level.PlayerChunk;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.server.level.EntityPlayer;
+import net.minecraft.util.INamable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeBase;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.block.state.properties.BlockProperties;
+import net.minecraft.world.level.block.state.properties.BlockStateDirection;
+import net.minecraft.world.level.block.state.properties.BlockStateEnum;
+import net.minecraft.world.level.chunk.Chunk;
 import org.apache.logging.log4j.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -83,7 +84,6 @@ import org.bukkit.craftbukkit.v1_19_R1.inventory.CraftItemStack;
 import org.bukkit.craftbukkit.v1_19_R1.util.CraftNamespacedKey;
 import org.bukkit.entity.Player;
 
-import javax.annotation.Nullable;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -101,14 +101,14 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.NBTBase, ServerLevel> {
+public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.NBTBase, WorldServer> {
 
     private static final Logger LOGGER = LogManagerCompat.getLogger();
     private static Method CHUNK_HOLDER_WAS_ACCESSIBLE_SINCE_LAST_SAVE;
 
     static {
         try {
-            CHUNK_HOLDER_WAS_ACCESSIBLE_SINCE_LAST_SAVE = ChunkHolder.class.getDeclaredMethod("wasAccessibleSinceLastSave");
+            CHUNK_HOLDER_WAS_ACCESSIBLE_SINCE_LAST_SAVE = PlayerChunk.class.getDeclaredMethod("wasAccessibleSinceLastSave");
         } catch (NoSuchMethodException ignored) { // may not be present in newer paper versions
         }
     }
@@ -127,9 +127,8 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         this.parent = new PaperweightAdapter();
     }
 
-    @Nullable
     private static String getEntityId(Entity entity) {
-        ResourceLocation resourceLocation = net.minecraft.world.entity.EntityType.getKey(entity.getType());
+        MinecraftKey resourceLocation = net.minecraft.world.entity.EntityTypes.getKey(entity.getType());
         return resourceLocation == null ? null : resourceLocation.toString();
     }
 
@@ -154,36 +153,36 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         }
         Map<String, List<Property<?>>> properties = new HashMap<>();
         try {
-            for (Field field : BlockStateProperties.class.getDeclaredFields()) {
+            for (Field field : BlockProperties.class.getDeclaredFields()) {
                 Object obj = field.get(null);
-                if (!(obj instanceof net.minecraft.world.level.block.state.properties.Property<?> state)) {
+                if (!(obj instanceof net.minecraft.world.level.block.state.properties.IBlockState<?> state)) {
                     continue;
                 }
                 Property<?> property;
-                if (state instanceof net.minecraft.world.level.block.state.properties.BooleanProperty) {
+                if (state instanceof net.minecraft.world.level.block.state.properties.BlockStateBoolean) {
                     property = new BooleanProperty(
                             state.getName(),
                             (List<Boolean>) ImmutableList.copyOf(state.getPossibleValues())
                     );
-                } else if (state instanceof DirectionProperty) {
+                } else if (state instanceof BlockStateDirection) {
                     property = new DirectionalProperty(
                             state.getName(),
                             state
                                     .getPossibleValues()
                                     .stream()
-                                    .map(e -> Direction.valueOf(((StringRepresentable) e).getSerializedName().toUpperCase()))
+                                    .map(e -> Direction.valueOf(((INamable) e).getSerializedName().toUpperCase()))
                                     .collect(Collectors.toList())
                     );
-                } else if (state instanceof net.minecraft.world.level.block.state.properties.EnumProperty) {
+                } else if (state instanceof BlockStateEnum<?>) {
                     property = new EnumProperty(
                             state.getName(),
                             state
                                     .getPossibleValues()
                                     .stream()
-                                    .map(e -> ((StringRepresentable) e).getSerializedName())
+                                    .map(e -> ((INamable) e).getSerializedName())
                                     .collect(Collectors.toList())
                     );
-                } else if (state instanceof net.minecraft.world.level.block.state.properties.IntegerProperty) {
+                } else if (state instanceof net.minecraft.world.level.block.state.properties.BlockStateInteger) {
                     property = new IntegerProperty(
                             state.getName(),
                             (List<Integer>) ImmutableList.copyOf(state.getPossibleValues())
@@ -219,13 +218,13 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
 
     @Override
     public synchronized BlockMaterial getMaterial(BlockState state) {
-        net.minecraft.world.level.block.state.BlockState blockState = ((CraftBlockData) Bukkit.createBlockData(state.getAsString())).getState();
+        net.minecraft.world.level.block.state.IBlockData blockState = ((CraftBlockData) Bukkit.createBlockData(state.getAsString())).getState();
         return new PaperweightBlockMaterial(blockState.getBlock(), blockState);
     }
 
     public Block getBlock(BlockType blockType) {
-        return DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.BLOCK_REGISTRY)
-                .get(new ResourceLocation(blockType.getNamespace(), blockType.getResource()));
+        return DedicatedServer.getServer().registryAccess().registryOrThrow(IRegistry.BLOCK_REGISTRY)
+                .get(new MinecraftKey(blockType.getNamespace(), blockType.getResource()));
     }
 
     @Deprecated
@@ -236,10 +235,10 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         int x = location.getBlockX();
         int y = location.getBlockY();
         int z = location.getBlockZ();
-        final ServerLevel handle = getServerLevel(location.getWorld());
-        LevelChunk chunk = handle.getChunk(x >> 4, z >> 4);
-        final BlockPos blockPos = new BlockPos(x, y, z);
-        final net.minecraft.world.level.block.state.BlockState blockData = chunk.getBlockState(blockPos);
+        final WorldServer handle = getServerLevel(location.getWorld());
+        Chunk chunk = handle.getChunk(x >> 4, z >> 4);
+        final BlockPosition blockPos = new BlockPosition(x, y, z);
+        final net.minecraft.world.level.block.state.IBlockData blockData = chunk.getBlockState(blockPos);
         BlockState state = adapt(blockData);
         if (state == null) {
             org.bukkit.block.Block bukkitBlock = location.getBlock();
@@ -256,10 +255,10 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         int y = location.getBlockY();
         int z = location.getBlockZ();
 
-        final ServerLevel handle = getServerLevel(location.getWorld());
-        LevelChunk chunk = handle.getChunk(x >> 4, z >> 4);
-        final BlockPos blockPos = new BlockPos(x, y, z);
-        final net.minecraft.world.level.block.state.BlockState blockData = chunk.getBlockState(blockPos);
+        final WorldServer handle = getServerLevel(location.getWorld());
+        Chunk chunk = handle.getChunk(x >> 4, z >> 4);
+        final BlockPosition blockPos = new BlockPosition(x, y, z);
+        final net.minecraft.world.level.block.state.IBlockData blockData = chunk.getBlockState(blockPos);
         BlockState state = adapt(blockData);
         if (state == null) {
             org.bukkit.block.Block bukkitBlock = location.getBlock();
@@ -268,7 +267,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         if (state.getBlockType().getMaterial().hasContainer()) {
 
             // Read the NBT data
-            BlockEntity blockEntity = chunk.getBlockEntity(blockPos, LevelChunk.EntityCreationType.CHECK);
+            TileEntity blockEntity = chunk.getBlockEntity(blockPos, Chunk.EnumTileEntityState.CHECK);
             if (blockEntity != null) {
                 net.minecraft.nbt.NBTTagCompound tag = blockEntity.saveWithId();
                 return state.toBaseBlock((CompoundBinaryTag) toNativeBinary(tag));
@@ -332,22 +331,22 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     @Override
     public OptionalInt getInternalBlockStateId(BlockState state) {
         PaperweightBlockMaterial material = (PaperweightBlockMaterial) state.getMaterial();
-        net.minecraft.world.level.block.state.BlockState mcState = material.getCraftBlockData().getState();
+        net.minecraft.world.level.block.state.IBlockData mcState = material.getCraftBlockData().getState();
         return OptionalInt.of(Block.BLOCK_STATE_REGISTRY.getId(mcState));
     }
 
     @Override
     public BlockState adapt(BlockData blockData) {
         CraftBlockData cbd = ((CraftBlockData) blockData);
-        net.minecraft.world.level.block.state.BlockState ibd = cbd.getState();
+        net.minecraft.world.level.block.state.IBlockData ibd = cbd.getState();
         return adapt(ibd);
     }
 
-    public BlockState adapt(net.minecraft.world.level.block.state.BlockState blockState) {
+    public BlockState adapt(net.minecraft.world.level.block.state.IBlockData blockState) {
         return BlockTypesCache.states[adaptToChar(blockState)];
     }
 
-    public char adaptToChar(net.minecraft.world.level.block.state.BlockState blockState) {
+    public char adaptToChar(net.minecraft.world.level.block.state.IBlockData blockState) {
         int id = Block.BLOCK_STATE_REGISTRY.getId(blockState);
         if (initialised) {
             return ibdToStateOrdinal[id];
@@ -430,15 +429,15 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
 
     @Override
     public void sendFakeChunk(org.bukkit.World world, Player player, ChunkPacket chunkPacket) {
-        ServerLevel nmsWorld = getServerLevel(world);
-        ChunkHolder map = PaperweightPlatformAdapter.getPlayerChunk(nmsWorld, chunkPacket.getChunkX(), chunkPacket.getChunkZ());
+        WorldServer nmsWorld = getServerLevel(world);
+        PlayerChunk map = PaperweightPlatformAdapter.getPlayerChunk(nmsWorld, chunkPacket.getChunkX(), chunkPacket.getChunkZ());
         if (map != null && wasAccessibleSinceLastSave(map)) {
             boolean flag = false;
             // PlayerChunk.d players = map.players;
-            Stream<ServerPlayer> stream = /*players.a(new ChunkCoordIntPair(packet.getChunkX(), packet.getChunkZ()), flag)
+            Stream<EntityPlayer> stream = /*players.a(new ChunkCoordIntPair(packet.getChunkX(), packet.getChunkZ()), flag)
              */ Stream.empty();
 
-            ServerPlayer checkPlayer = player == null ? null : ((CraftPlayer) player).getHandle();
+            EntityPlayer checkPlayer = player == null ? null : ((CraftPlayer) player).getHandle();
             stream.filter(entityPlayer -> checkPlayer == null || entityPlayer == checkPlayer)
                     .forEach(entityPlayer -> {
                         synchronized (chunkPacket) {
@@ -466,18 +465,18 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     @Override
     public boolean canPlaceAt(org.bukkit.World world, BlockVector3 blockVector3, BlockState blockState) {
         int internalId = BlockStateIdAccess.getBlockStateId(blockState);
-        net.minecraft.world.level.block.state.BlockState blockState1 = Block.stateById(internalId);
+        net.minecraft.world.level.block.state.IBlockData blockState1 = Block.stateById(internalId);
         return blockState1.hasPostProcess(
                 getServerLevel(world),
-                new BlockPos(blockVector3.getX(), blockVector3.getY(), blockVector3.getZ())
+                new BlockPosition(blockVector3.getX(), blockVector3.getY(), blockVector3.getZ())
         );
     }
 
     @Override
     public org.bukkit.inventory.ItemStack adapt(BaseItemStack baseItemStack) {
         ItemStack stack = new ItemStack(
-                DedicatedServer.getServer().registryAccess().registryOrThrow(Registry.ITEM_REGISTRY)
-                        .get(ResourceLocation.tryParse(baseItemStack.getType().getId())),
+                DedicatedServer.getServer().registryAccess().registryOrThrow(IRegistry.ITEM_REGISTRY)
+                        .get(MinecraftKey.tryParse(baseItemStack.getType().getId())),
                 baseItemStack.getAmount()
         );
         stack.setTag(((net.minecraft.nbt.NBTTagCompound) fromNative(baseItemStack.getNbtData())));
@@ -485,25 +484,25 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
     }
 
     @Override
-    protected void preCaptureStates(final ServerLevel serverLevel) {
+    protected void preCaptureStates(final WorldServer serverLevel) {
         serverLevel.captureTreeGeneration = true;
         serverLevel.captureBlockStates = true;
     }
 
     @Override
-    protected List<org.bukkit.block.BlockState> getCapturedBlockStatesCopy(final ServerLevel serverLevel) {
+    protected List<org.bukkit.block.BlockState> getCapturedBlockStatesCopy(final WorldServer serverLevel) {
         return new ArrayList<>(serverLevel.capturedBlockStates.values());
     }
 
     @Override
-    protected void postCaptureBlockStates(final ServerLevel serverLevel) {
+    protected void postCaptureBlockStates(final WorldServer serverLevel) {
         serverLevel.captureBlockStates = false;
         serverLevel.captureTreeGeneration = false;
         serverLevel.capturedBlockStates.clear();
     }
 
     @Override
-    protected ServerLevel getServerLevel(final World world) {
+    protected WorldServer getServerLevel(final World world) {
         return ((CraftWorld) world).getHandle();
     }
 
@@ -540,25 +539,25 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
 
     @Override
     public int getInternalBiomeId(BiomeType biomeType) {
-        final Registry<Biome> registry = MinecraftServer
+        final IRegistry<BiomeBase> registry = MinecraftServer
                 .getServer()
                 .registryAccess()
-                .registryOrThrow(Registry.BIOME_REGISTRY);
-        ResourceLocation resourceLocation = ResourceLocation.tryParse(biomeType.getId());
-        Biome biome = registry.get(resourceLocation);
+                .registryOrThrow(IRegistry.BIOME_REGISTRY);
+        MinecraftKey resourceLocation = MinecraftKey.tryParse(biomeType.getId());
+        BiomeBase biome = registry.get(resourceLocation);
         return registry.getId(biome);
     }
 
     @Override
     public Iterable<NamespacedKey> getRegisteredBiomes() {
-        WritableRegistry<Biome> biomeRegistry = (WritableRegistry<Biome>) ((CraftServer) Bukkit.getServer())
+        IRegistryWritable<BiomeBase> biomeRegistry = (IRegistryWritable<BiomeBase>) ((CraftServer) Bukkit.getServer())
                 .getServer()
                 .registryAccess()
-                .registryOrThrow(Registry.BIOME_REGISTRY);
-        List<ResourceLocation> keys = biomeRegistry.stream()
+                .registryOrThrow(IRegistry.BIOME_REGISTRY);
+        List<MinecraftKey> keys = biomeRegistry.stream()
                 .map(biomeRegistry::getKey).filter(Objects::nonNull).toList();
         List<NamespacedKey> namespacedKeys = new ArrayList<>();
-        for (ResourceLocation key : keys) {
+        for (MinecraftKey key : keys) {
             try {
                 namespacedKeys.add(CraftNamespacedKey.fromMinecraft(key));
             } catch (IllegalArgumentException e) {
@@ -596,7 +595,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         return new PaperweightPostProcessor();
     }
 
-    private boolean wasAccessibleSinceLastSave(ChunkHolder holder) {
+    private boolean wasAccessibleSinceLastSave(PlayerChunk holder) {
         if (!PaperLib.isPaper() || !PaperweightPlatformAdapter.POST_CHUNK_REWRITE) {
             try {
                 return (boolean) CHUNK_HOLDER_WAS_ACCESSIBLE_SINCE_LAST_SAVE.invoke(holder);

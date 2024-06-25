@@ -20,31 +20,31 @@
 package com.sk89q.worldedit.bukkit.adapter.ext.fawe.v1_19_R1;
 
 import com.mojang.authlib.GameProfile;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ServerboundClientInformationPacket;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.stats.Stat;
-import net.minecraft.world.MenuProvider;
+import net.minecraft.network.chat.IChatBaseComponent;
+import net.minecraft.network.protocol.game.PacketPlayInSettings;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.server.level.EntityPlayer;
+import net.minecraft.stats.Statistic;
+import net.minecraft.world.ITileInventory;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.entity.SignBlockEntity;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.block.entity.TileEntitySign;
+import net.minecraft.world.phys.Vec3D;
 import org.bukkit.event.player.PlayerTeleportEvent.TeleportCause;
 
 import java.util.OptionalInt;
 import java.util.UUID;
 
-class PaperweightFakePlayer extends ServerPlayer {
+class PaperweightFakePlayer extends EntityPlayer {
     private static final GameProfile FAKE_WORLDEDIT_PROFILE = new GameProfile(UUID.nameUUIDFromBytes("worldedit".getBytes()), "[WorldEdit]");
-    private static final Vec3 ORIGIN = new Vec3(0.0D, 0.0D, 0.0D);
+    private static final Vec3D ORIGIN = new Vec3D(0.0D, 0.0D, 0.0D);
 
-    PaperweightFakePlayer(ServerLevel world) {
+    PaperweightFakePlayer(WorldServer world) {
         super(world.getServer(), world, FAKE_WORLDEDIT_PROFILE, null);
     }
 
     @Override
-    public Vec3 position() {
+    public Vec3D position() {
         return ORIGIN;
     }
 
@@ -57,29 +57,29 @@ class PaperweightFakePlayer extends ServerPlayer {
     }
 
     @Override
-    public Entity changeDimension(ServerLevel worldserver, TeleportCause cause) {
+    public Entity changeDimension(WorldServer worldserver, TeleportCause cause) {
         return this;
     }
 
     @Override
-    public OptionalInt openMenu(MenuProvider factory) {
+    public OptionalInt openMenu(ITileInventory factory) {
         return OptionalInt.empty();
     }
 
     @Override
-    public void updateOptions(ServerboundClientInformationPacket packet) {
+    public void updateOptions(PacketPlayInSettings packet) {
     }
 
     @Override
-    public void displayClientMessage(Component message, boolean actionBar) {
+    public void displayClientMessage(IChatBaseComponent message, boolean actionBar) {
     }
 
     @Override
-    public void awardStat(Stat<?> stat, int amount) {
+    public void awardStat(Statistic<?> stat, int amount) {
     }
 
     @Override
-    public void awardStat(Stat<?> stat) {
+    public void awardStat(Statistic<?> stat) {
     }
 
     @Override
@@ -88,6 +88,6 @@ class PaperweightFakePlayer extends ServerPlayer {
     }
 
     @Override
-    public void openTextEdit(SignBlockEntity sign) {
+    public void openTextEdit(TileEntitySign sign) {
     }
 }

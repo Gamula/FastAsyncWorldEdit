@@ -26,33 +26,32 @@ import com.sk89q.worldedit.util.SideEffect;
 import com.sk89q.worldedit.util.SideEffectSet;
 import com.sk89q.worldedit.util.nbt.CompoundBinaryTag;
 import com.sk89q.worldedit.world.block.BlockState;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.server.level.PlayerChunk;
+import net.minecraft.server.level.WorldServer;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.Chunk;
 import org.bukkit.craftbukkit.v1_19_R1.CraftWorld;
 import org.bukkit.craftbukkit.v1_19_R1.block.data.CraftBlockData;
 import org.bukkit.event.block.BlockPhysicsEvent;
 
 import java.lang.ref.WeakReference;
 import java.util.Objects;
-import javax.annotation.Nullable;
 
-public class PaperweightWorldNativeAccess implements WorldNativeAccess<LevelChunk, net.minecraft.world.level.block.state.BlockState, BlockPos> {
+public class PaperweightWorldNativeAccess implements WorldNativeAccess<Chunk, net.minecraft.world.level.block.state.IBlockData, BlockPosition> {
     private static final int UPDATE = 1;
     private static final int NOTIFY = 2;
 
     private final PaperweightAdapter adapter;
-    private final WeakReference<ServerLevel> world;
+    private final WeakReference<WorldServer> world;
     private SideEffectSet sideEffectSet;
 
-    public PaperweightWorldNativeAccess(PaperweightAdapter adapter, WeakReference<ServerLevel> world) {
+    public PaperweightWorldNativeAccess(PaperweightAdapter adapter, WeakReference<WorldServer> world) {
         this.adapter = adapter;
         this.world = world;
     }
 
-    private ServerLevel getWorld() {
+    private WorldServer getWorld() {
         return Objects.requireNonNull(world.get(), "The reference to the world was lost");
     }
 
@@ -62,12 +61,12 @@ public class PaperweightWorldNativeAccess implements WorldNativeAccess<LevelChun
     }
 
     @Override
-    public LevelChunk getChunk(int x, int z) {
+    public Chunk getChunk(int x, int z) {
         return getWorld().getChunk(x, z);
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState toNative(BlockState state) {
+    public net.minecraft.world.level.block.state.IBlockData toNative(BlockState state) {
         int stateId = BlockStateIdAccess.getBlockStateId(state);
         return BlockStateIdAccess.isValidInternalId(stateId)
                 ? Block.stateById(stateId)
@@ -75,58 +74,57 @@ public class PaperweightWorldNativeAccess implements WorldNativeAccess<LevelChun
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState getBlockState(LevelChunk chunk, BlockPos position) {
+    public net.minecraft.world.level.block.state.IBlockData getBlockState(Chunk chunk, BlockPosition position) {
         return chunk.getBlockState(position);
     }
 
-    @Nullable
     @Override
-    public net.minecraft.world.level.block.state.BlockState setBlockState(LevelChunk chunk, BlockPos position, net.minecraft.world.level.block.state.BlockState state) {
+    public net.minecraft.world.level.block.state.IBlockData setBlockState(Chunk chunk, BlockPosition position, net.minecraft.world.level.block.state.IBlockData state) {
         return chunk.setBlockState(position, state, false, this.sideEffectSet.shouldApply(SideEffect.UPDATE));
     }
 
     @Override
-    public net.minecraft.world.level.block.state.BlockState getValidBlockForPosition(net.minecraft.world.level.block.state.BlockState block, BlockPos position) {
+    public net.minecraft.world.level.block.state.IBlockData getValidBlockForPosition(net.minecraft.world.level.block.state.IBlockData block, BlockPosition position) {
         return Block.updateFromNeighbourShapes(block, getWorld(), position);
     }
 
     @Override
-    public BlockPos getPosition(int x, int y, int z) {
-        return new BlockPos(x, y, z);
+    public BlockPosition getPosition(int x, int y, int z) {
+        return new BlockPosition(x, y, z);
     }
 
     @Override
-    public void updateLightingForBlock(BlockPos position) {
+    public void updateLightingForBlock(BlockPosition position) {
         getWorld().getChunkSource().getLightEngine().checkBlock(position);
     }
 
     @Override
-    public boolean updateTileEntity(final BlockPos position, final CompoundBinaryTag tag) {
+    public boolean updateTileEntity(final BlockPosition position, final CompoundBinaryTag tag) {
         return false;
     }
 
     @Override
-    public void notifyBlockUpdate(LevelChunk chunk, BlockPos position, net.minecraft.world.level.block.state.BlockState oldState, net.minecraft.world.level.block.state.BlockState newState) {
+    public void notifyBlockUpdate(Chunk chunk, BlockPosition position, net.minecraft.world.level.block.state.IBlockData oldState, net.minecraft.world.level.block.state.IBlockData newState) {
         if (chunk.getSections()[getWorld().getSectionIndex(position.getY())] != null) {
             getWorld().sendBlockUpdated(position, oldState, newState, UPDATE | NOTIFY);
         }
     }
 
     @Override
-    public boolean isChunkTicking(LevelChunk chunk) {
-        return chunk.getFullStatus().isOrAfter(ChunkHolder.FullChunkStatus.TICKING);
+    public boolean isChunkTicking(Chunk chunk) {
+        return chunk.getFullStatus().isOrAfter(PlayerChunk.State.TICKING);
     }
 
     @Override
-    public void markBlockChanged(LevelChunk chunk, BlockPos position) {
+    public void markBlockChanged(Chunk chunk, BlockPosition position) {
         if (chunk.getSections()[getWorld().getSectionIndex(position.getY())] != null) {
             getWorld().getChunkSource().blockChanged(position);
         }
     }
 
     @Override
-    public void notifyNeighbors(BlockPos pos, net.minecraft.world.level.block.state.BlockState oldState, net.minecraft.world.level.block.state.BlockState newState) {
-        ServerLevel world = getWorld();
+    public void notifyNeighbors(BlockPosition pos, net.minecraft.world.level.block.state.IBlockData oldState, net.minecraft.world.level.block.state.IBlockData newState) {
+        WorldServer world = getWorld();
         if (sideEffectSet.shouldApply(SideEffect.EVENTS)) {
             world.updateNeighborsAt(pos, oldState.getBlock());
         } else {
@@ -146,13 +144,13 @@ public class PaperweightWorldNativeAccess implements WorldNativeAccess<LevelChun
 
     // Not sure why neighborChanged is deprecated
     @SuppressWarnings("deprecation")
-    private void fireNeighborChanged(BlockPos pos, ServerLevel world, Block block, BlockPos neighborPos) {
+    private void fireNeighborChanged(BlockPosition pos, WorldServer world, Block block, BlockPosition neighborPos) {
         world.getBlockState(neighborPos).neighborChanged(world, neighborPos, block, pos, false);
     }
 
     @Override
-    public void updateNeighbors(BlockPos pos, net.minecraft.world.level.block.state.BlockState oldState, net.minecraft.world.level.block.state.BlockState newState, int recursionLimit) {
-        ServerLevel world = getWorld();
+    public void updateNeighbors(BlockPosition pos, net.minecraft.world.level.block.state.IBlockData oldState, net.minecraft.world.level.block.state.IBlockData newState, int recursionLimit) {
+        WorldServer world = getWorld();
         // a == updateNeighbors
         // b == updateDiagonalNeighbors
         oldState.updateIndirectNeighbourShapes(world, pos, NOTIFY, recursionLimit);
@@ -169,7 +167,7 @@ public class PaperweightWorldNativeAccess implements WorldNativeAccess<LevelChun
     }
 
     @Override
-    public void onBlockStateChange(BlockPos pos, net.minecraft.world.level.block.state.BlockState oldState, net.minecraft.world.level.block.state.BlockState newState) {
+    public void onBlockStateChange(BlockPosition pos, net.minecraft.world.level.block.state.IBlockData oldState, net.minecraft.world.level.block.state.IBlockData newState) {
         getWorld().onBlockStateChange(pos, oldState, newState);
     }
 

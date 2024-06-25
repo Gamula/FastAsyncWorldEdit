@@ -21,47 +21,44 @@ import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockTypesCache;
 import io.papermc.lib.PaperLib;
 import io.papermc.paper.world.ChunkEntitySlices;
-import net.minecraft.core.BlockPos;
+import net.minecraft.core.BlockPosition;
 import net.minecraft.core.Holder;
-import net.minecraft.core.IdMap;
+import net.minecraft.core.IRegistry;
 import net.minecraft.core.Registry;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
-import net.minecraft.server.level.ChunkHolder;
-import net.minecraft.server.level.ChunkMap;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.PlayerChunk;
+import net.minecraft.server.level.PlayerChunkMap;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.server.level.EntityPlayer;
 import net.minecraft.server.level.TicketType;
-import net.minecraft.util.BitStorage;
-import net.minecraft.util.ExceptionCollector;
+import net.minecraft.util.DataBits;
+import net.minecraft.util.ExceptionSuppressor;
 import net.minecraft.util.SimpleBitStorage;
 import net.minecraft.util.ThreadingDetector;
 import net.minecraft.util.Unit;
 import net.minecraft.util.ZeroBitStorage;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.npc.AbstractVillager;
-import net.minecraft.world.item.trading.MerchantOffers;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.entity.npc.EntityVillagerAbstract;
+import net.minecraft.world.item.trading.MerchantRecipeList;
+import net.minecraft.world.level.ChunkCoordIntPair;
+import net.minecraft.world.level.GeneratorAccess;
+import net.minecraft.world.level.biome.BiomeBase;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.chunk.ChunkStatus;
-import net.minecraft.world.level.chunk.GlobalPalette;
-import net.minecraft.world.level.chunk.HashMapPalette;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.LinearPalette;
-import net.minecraft.world.level.chunk.Palette;
-import net.minecraft.world.level.chunk.PalettedContainer;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.chunk.DataPaletteBlock;
+import net.minecraft.world.level.chunk.DataPaletteGlobal;
+import net.minecraft.world.level.chunk.DataPaletteHash;
+import net.minecraft.world.level.chunk.Chunk;
+import net.minecraft.world.level.chunk.ChunkSection;
+import net.minecraft.world.level.chunk.DataPaletteLinear;
+import net.minecraft.world.level.chunk.DataPalette;
 import net.minecraft.world.level.chunk.SingleValuePalette;
 import net.minecraft.world.level.entity.PersistentEntitySectionManager;
 import org.apache.logging.log4j.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.craftbukkit.v1_19_R1.CraftChunk;
 
-import javax.annotation.Nonnull;
-import javax.annotation.Nullable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
@@ -105,7 +102,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     private static final MethodHandle methodremoveTickingBlockEntity;
 
     private static final Field fieldOffers;
-    private static final MerchantOffers OFFERS = new MerchantOffers();
+    private static final MerchantRecipeList OFFERS = new MerchantRecipeList();
 
     private static final Field fieldRemove;
 
@@ -119,7 +116,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     static {
         final MethodHandles.Lookup lookup = MethodHandles.lookup();
         try {
-            fieldData = PalettedContainer.class.getDeclaredField(Refraction.pickName("data", "d"));
+            fieldData = DataPaletteBlock.class.getDeclaredField(Refraction.pickName("data", "d"));
             fieldData.setAccessible(true);
 
             Class<?> dataClazz = fieldData.getType();
@@ -131,14 +128,14 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
             fieldPalette = dataClazz.getDeclaredField(Refraction.pickName("palette", "c"));
             fieldPalette.setAccessible(true);
 
-            fieldTickingFluidCount = LevelChunkSection.class.getDeclaredField(Refraction.pickName("tickingFluidCount", "h"));
+            fieldTickingFluidCount = ChunkSection.class.getDeclaredField(Refraction.pickName("tickingFluidCount", "h"));
             fieldTickingFluidCount.setAccessible(true);
-            fieldTickingBlockCount = LevelChunkSection.class.getDeclaredField(Refraction.pickName("tickingBlockCount", "g"));
+            fieldTickingBlockCount = ChunkSection.class.getDeclaredField(Refraction.pickName("tickingBlockCount", "g"));
             fieldTickingBlockCount.setAccessible(true);
-            fieldNonEmptyBlockCount = LevelChunkSection.class.getDeclaredField(Refraction.pickName("nonEmptyBlockCount", "f"));
+            fieldNonEmptyBlockCount = ChunkSection.class.getDeclaredField(Refraction.pickName("nonEmptyBlockCount", "f"));
             fieldNonEmptyBlockCount.setAccessible(true);
 
-            Method getVisibleChunkIfPresent = ChunkMap.class.getDeclaredMethod(Refraction.pickName(
+            Method getVisibleChunkIfPresent = PlayerChunkMap.class.getDeclaredMethod(Refraction.pickName(
                     "getVisibleChunkIfPresent",
                     "b"
             ), long.class);
@@ -146,7 +143,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
             methodGetVisibleChunk = lookup.unreflect(getVisibleChunkIfPresent);
 
             if (!PaperLib.isPaper()) {
-                fieldThreadingDetector = PalettedContainer.class.getDeclaredField(Refraction.pickName("threadingDetector", "f"));
+                fieldThreadingDetector = DataPaletteBlock.class.getDeclaredField(Refraction.pickName("threadingDetector", "f"));
                 fieldThreadingDetector.setAccessible(true);
                 fieldLock = ThreadingDetector.class.getDeclaredField(Refraction.pickName("lock", "c"));
                 fieldLock.setAccessible(true);
@@ -156,29 +153,29 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
                 fieldLock = null;
             }
 
-            Method removeGameEventListener = LevelChunk.class.getDeclaredMethod(
+            Method removeGameEventListener = Chunk.class.getDeclaredMethod(
                     Refraction.pickName("removeGameEventListener", "a"),
-                    BlockEntity.class,
-                    ServerLevel.class
+                    TileEntity.class,
+                    WorldServer.class
             );
             removeGameEventListener.setAccessible(true);
             methodRemoveGameEventListener = lookup.unreflect(removeGameEventListener);
 
-            Method removeBlockEntityTicker = LevelChunk.class.getDeclaredMethod(
+            Method removeBlockEntityTicker = Chunk.class.getDeclaredMethod(
                     Refraction.pickName(
                             "removeBlockEntityTicker",
                             "l"
-                    ), BlockPos.class
+                    ), BlockPosition.class
             );
             removeBlockEntityTicker.setAccessible(true);
             methodremoveTickingBlockEntity = lookup.unreflect(removeBlockEntityTicker);
 
-            fieldRemove = BlockEntity.class.getDeclaredField(Refraction.pickName("remove", "q"));
+            fieldRemove = TileEntity.class.getDeclaredField(Refraction.pickName("remove", "q"));
             fieldRemove.setAccessible(true);
 
             boolean chunkRewrite;
             try {
-                ServerLevel.class.getDeclaredMethod("getEntityLookup");
+                WorldServer.class.getDeclaredMethod("getEntityLookup");
                 chunkRewrite = true;
                 PAPER_CHUNK_GEN_ALL_ENTITIES = ChunkEntitySlices.class.getDeclaredMethod("getAllEntities");
                 PAPER_CHUNK_GEN_ALL_ENTITIES.setAccessible(true);
@@ -187,19 +184,19 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
             }
             try {
                 // Paper - Pre-Chunk-Update
-                LEVEL_CHUNK_ENTITIES = LevelChunk.class.getDeclaredField("entities");
+                LEVEL_CHUNK_ENTITIES = Chunk.class.getDeclaredField("entities");
                 LEVEL_CHUNK_ENTITIES.setAccessible(true);
             } catch (NoSuchFieldException ignored) {
             }
             try {
                 // Non-Paper
-                SERVER_LEVEL_ENTITY_MANAGER = ServerLevel.class.getDeclaredField(Refraction.pickName("entityManager", "L"));
+                SERVER_LEVEL_ENTITY_MANAGER = WorldServer.class.getDeclaredField(Refraction.pickName("entityManager", "L"));
                 SERVER_LEVEL_ENTITY_MANAGER.setAccessible(true);
             } catch (NoSuchFieldException ignored) {
             }
             POST_CHUNK_REWRITE = chunkRewrite;
 
-            fieldOffers = AbstractVillager.class.getDeclaredField(Refraction.pickName("offers", "bT"));
+            fieldOffers = EntityVillagerAbstract.class.getDeclaredField(Refraction.pickName("offers", "bT"));
             fieldOffers.setAccessible(true);
         } catch (RuntimeException | Error e) {
             throw e;
@@ -209,9 +206,9 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     }
 
     static boolean setSectionAtomic(
-            LevelChunkSection[] sections,
-            LevelChunkSection expected,
-            LevelChunkSection value,
+            ChunkSection[] sections,
+            ChunkSection expected,
+            ChunkSection value,
             int layer
     ) {
         if (layer >= 0 && layer < sections.length) {
@@ -224,13 +221,13 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     private static final ThreadLocal<DelegateSemaphore> SEMAPHORE_THREAD_LOCAL =
             ThreadLocal.withInitial(() -> new DelegateSemaphore(1, null));
 
-    static DelegateSemaphore applyLock(LevelChunkSection section) {
+    static DelegateSemaphore applyLock(ChunkSection section) {
         if (PaperLib.isPaper()) {
             return SEMAPHORE_THREAD_LOCAL.get();
         }
         try {
             synchronized (section) {
-                PalettedContainer<net.minecraft.world.level.block.state.BlockState> blocks = section.getStates();
+                DataPaletteBlock<net.minecraft.world.level.block.state.IBlockData> blocks = section.getStates();
                 ThreadingDetector currentThreadingDetector = (ThreadingDetector) fieldThreadingDetector.get(blocks);
                 synchronized (currentThreadingDetector) {
                     Semaphore currentLock = (Semaphore) fieldLock.get(currentThreadingDetector);
@@ -248,9 +245,9 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         }
     }
 
-    public static LevelChunk ensureLoaded(ServerLevel serverLevel, int chunkX, int chunkZ) {
+    public static Chunk ensureLoaded(WorldServer serverLevel, int chunkX, int chunkZ) {
         if (!PaperLib.isPaper()) {
-            LevelChunk nmsChunk = serverLevel.getChunkSource().getChunk(chunkX, chunkZ, false);
+            Chunk nmsChunk = serverLevel.getChunkSource().getChunk(chunkX, chunkZ, false);
             if (nmsChunk != null) {
                 return nmsChunk;
             }
@@ -258,7 +255,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
                 return serverLevel.getChunk(chunkX, chunkZ);
             }
         } else {
-            LevelChunk nmsChunk = serverLevel.getChunkSource().getChunkAtIfCachedImmediately(chunkX, chunkZ);
+            Chunk nmsChunk = serverLevel.getChunkSource().getChunkAtIfCachedImmediately(chunkX, chunkZ);
             if (nmsChunk != null) {
                 addTicket(serverLevel, chunkX, chunkZ);
                 return nmsChunk;
@@ -290,7 +287,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
                     }
                 }
                 addTicket(serverLevel, chunkX, chunkZ);
-                return (LevelChunk) chunk.getHandle();
+                return (Chunk) chunk.getHandle();
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -298,39 +295,39 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         return TaskManager.taskManager().sync(() -> serverLevel.getChunk(chunkX, chunkZ));
     }
 
-    private static void addTicket(ServerLevel serverLevel, int chunkX, int chunkZ) {
+    private static void addTicket(WorldServer serverLevel, int chunkX, int chunkZ) {
         // Ensure chunk is definitely loaded before applying a ticket
         io.papermc.paper.util.MCUtil.MAIN_EXECUTOR.execute(() -> serverLevel
                 .getChunkSource()
-                .addRegionTicket(TicketType.UNLOAD_COOLDOWN, new ChunkPos(chunkX, chunkZ), 0, Unit.INSTANCE));
+                .addRegionTicket(TicketType.UNLOAD_COOLDOWN, new ChunkCoordIntPair(chunkX, chunkZ), 0, Unit.INSTANCE));
     }
 
-    public static ChunkHolder getPlayerChunk(ServerLevel nmsWorld, final int chunkX, final int chunkZ) {
-        ChunkMap chunkMap = nmsWorld.getChunkSource().chunkMap;
+    public static PlayerChunk getPlayerChunk(WorldServer nmsWorld, final int chunkX, final int chunkZ) {
+        PlayerChunkMap chunkMap = nmsWorld.getChunkSource().chunkMap;
         try {
-            return (ChunkHolder) methodGetVisibleChunk.invoke(chunkMap, ChunkPos.asLong(chunkX, chunkZ));
+            return (PlayerChunk) methodGetVisibleChunk.invoke(chunkMap, ChunkCoordIntPair.asLong(chunkX, chunkZ));
         } catch (Throwable thr) {
             throw new RuntimeException(thr);
         }
     }
 
     @SuppressWarnings("deprecation")
-    public static void sendChunk(ServerLevel nmsWorld, int chunkX, int chunkZ, boolean lighting) {
-        ChunkHolder chunkHolder = getPlayerChunk(nmsWorld, chunkX, chunkZ);
+    public static void sendChunk(WorldServer nmsWorld, int chunkX, int chunkZ, boolean lighting) {
+        PlayerChunk chunkHolder = getPlayerChunk(nmsWorld, chunkX, chunkZ);
         if (chunkHolder == null) {
             return;
         }
-        ChunkPos coordIntPair = new ChunkPos(chunkX, chunkZ);
-        LevelChunk levelChunk;
+        ChunkCoordIntPair coordIntPair = new ChunkCoordIntPair(chunkX, chunkZ);
+        Chunk levelChunk;
         if (PaperLib.isPaper()) {
             // getChunkAtIfLoadedImmediately is paper only
             levelChunk = nmsWorld
                     .getChunkSource()
                     .getChunkAtIfLoadedImmediately(chunkX, chunkZ);
         } else {
-            levelChunk = ((Optional<LevelChunk>) ((Either) chunkHolder
+            levelChunk = ((Optional<Chunk>) ((Either) chunkHolder
                     .getTickingChunkFuture() // method is not present with new paper chunk system
-                    .getNow(ChunkHolder.UNLOADED_LEVEL_CHUNK)).left())
+                    .getNow(PlayerChunk.UNLOADED_LEVEL_CHUNK)).left())
                     .orElse(null);
         }
         if (levelChunk == null) {
@@ -361,30 +358,30 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         });
     }
 
-    private static List<ServerPlayer> nearbyPlayers(ServerLevel serverLevel, ChunkPos coordIntPair) {
+    private static List<EntityPlayer> nearbyPlayers(WorldServer serverLevel, ChunkCoordIntPair coordIntPair) {
         return serverLevel.getChunkSource().chunkMap.getPlayers(coordIntPair, false);
     }
 
     /*
     NMS conversion
      */
-    public static LevelChunkSection newChunkSection(
+    public static ChunkSection newChunkSection(
             final int layer,
             final char[] blocks,
             CachedBukkitAdapter adapter,
-            Registry<Biome> biomeRegistry,
-            @Nullable PalettedContainer<Holder<Biome>> biomes
+            IRegistry<BiomeBase> biomeRegistry,
+            DataPaletteBlock<Holder<BiomeBase>> biomes
     ) {
         return newChunkSection(layer, null, blocks, adapter, biomeRegistry, biomes);
     }
 
-    public static LevelChunkSection newChunkSection(
+    public static ChunkSection newChunkSection(
             final int layer,
             final Function<Integer, char[]> get,
             char[] set,
             CachedBukkitAdapter adapter,
-            Registry<Biome> biomeRegistry,
-            @Nullable PalettedContainer<Holder<Biome>> biomes
+            IRegistry<BiomeBase> biomeRegistry,
+            DataPaletteBlock<Holder<BiomeBase>> biomes
     ) {
         if (set == null) {
             return newChunkSection(layer, biomeRegistry, biomes);
@@ -422,13 +419,13 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
             }
 
             final long[] bits = Arrays.copyOfRange(blockStates, 0, blockBitArrayEnd);
-            final BitStorage nmsBits;
+            final DataBits nmsBits;
             if (bitsPerEntry == 0) {
                 nmsBits = new ZeroBitStorage(4096);
             } else {
                 nmsBits = new SimpleBitStorage(bitsPerEntry, 4096, bits);
             }
-            List<net.minecraft.world.level.block.state.BlockState> palette;
+            List<net.minecraft.world.level.block.state.IBlockData> palette;
             if (bitsPerEntry < 9) {
                 palette = new ArrayList<>();
                 for (int i = 0; i < num_palette; i++) {
@@ -443,29 +440,29 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
 
             // Create palette with data
             @SuppressWarnings("deprecation") // constructor is deprecated on paper, but needed to keep compatibility with spigot
-            final PalettedContainer<net.minecraft.world.level.block.state.BlockState> blockStatePalettedContainer =
-                    new PalettedContainer<>(
+            final DataPaletteBlock<net.minecraft.world.level.block.state.IBlockData> blockStatePalettedContainer =
+                    new DataPaletteBlock<>(
                             Block.BLOCK_STATE_REGISTRY,
-                            PalettedContainer.Strategy.SECTION_STATES,
-                            PalettedContainer.Strategy.SECTION_STATES.getConfiguration(Block.BLOCK_STATE_REGISTRY, bitsPerEntry),
+                            DataPaletteBlock.Strategy.SECTION_STATES,
+                            DataPaletteBlock.Strategy.SECTION_STATES.getConfiguration(Block.BLOCK_STATE_REGISTRY, bitsPerEntry),
                             nmsBits,
                             palette
                     );
             if (biomes == null) {
-                IdMap<Holder<Biome>> biomeHolderIdMap = biomeRegistry.asHolderIdMap();
-                biomes = new PalettedContainer<>(
+                Registry<Holder<BiomeBase>> biomeHolderIdMap = biomeRegistry.asHolderIdMap();
+                biomes = new DataPaletteBlock<>(
                         biomeHolderIdMap,
                         biomeHolderIdMap.byIdOrThrow(WorldEditPlugin
                                 .getInstance()
                                 .getBukkitImplAdapter()
                                 .getInternalBiomeId(
                                         BiomeTypes.PLAINS)),
-                        PalettedContainer.Strategy.SECTION_BIOMES,
+                        DataPaletteBlock.Strategy.SECTION_BIOMES,
                         null
                 );
             }
 
-            return new LevelChunkSection(layer, blockStatePalettedContainer, biomes);
+            return new ChunkSection(layer, blockStatePalettedContainer, biomes);
         } catch (final Throwable e) {
             throw e;
         } finally {
@@ -477,38 +474,38 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     }
 
     @SuppressWarnings("deprecation") // Only deprecated in paper
-    private static LevelChunkSection newChunkSection(
+    private static ChunkSection newChunkSection(
             int layer,
-            Registry<Biome> biomeRegistry,
-            @Nullable PalettedContainer<Holder<Biome>> biomes
+            IRegistry<BiomeBase> biomeRegistry,
+            DataPaletteBlock<Holder<BiomeBase>> biomes
     ) {
         if (biomes == null) {
-            return new LevelChunkSection(layer, biomeRegistry);
+            return new ChunkSection(layer, biomeRegistry);
         }
-        PalettedContainer<net.minecraft.world.level.block.state.BlockState> dataPaletteBlocks = new PalettedContainer<>(
+        DataPaletteBlock<net.minecraft.world.level.block.state.IBlockData> dataPaletteBlocks = new DataPaletteBlock<>(
                 Block.BLOCK_STATE_REGISTRY,
                 Blocks.AIR.defaultBlockState(),
-                PalettedContainer.Strategy.SECTION_STATES,
+                DataPaletteBlock.Strategy.SECTION_STATES,
                 null
         );
-        return new LevelChunkSection(layer, dataPaletteBlocks, biomes);
+        return new ChunkSection(layer, dataPaletteBlocks, biomes);
     }
 
     /**
-     * Create a new {@link PalettedContainer<Biome>}. Should only be used if no biome container existed beforehand.
+     * Create a new {@link DataPaletteBlock<BiomeBase>}. Should only be used if no biome container existed beforehand.
      */
-    public static PalettedContainer<Holder<Biome>> getBiomePalettedContainer(
+    public static DataPaletteBlock<Holder<BiomeBase>> getBiomePalettedContainer(
             BiomeType[] biomes,
-            IdMap<Holder<Biome>> biomeRegistry
+            IRegistry<Holder<BiomeBase>> biomeRegistry
     ) {
         if (biomes == null) {
             return null;
         }
         BukkitImplAdapter<?> adapter = WorldEditPlugin.getInstance().getBukkitImplAdapter();
         // Don't stream this as typically will see 1-4 biomes; stream overhead is large for the small length
-        Map<BiomeType, Holder<Biome>> palette = new HashMap<>();
+        Map<BiomeType, Holder<BiomeBase>> palette = new HashMap<>();
         for (BiomeType biomeType : new LinkedList<>(Arrays.asList(biomes))) {
-            Holder<Biome> biome;
+            Holder<BiomeBase> biome;
             if (biomeType == null) {
                 biome = biomeRegistry.byId(adapter.getInternalBiomeId(BiomeTypes.PLAINS));
             } else {
@@ -518,21 +515,21 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         }
         int biomeCount = palette.size();
         int bitsPerEntry = MathMan.log2nlz(biomeCount - 1);
-        Object configuration = PalettedContainer.Strategy.SECTION_STATES.getConfiguration(
+        Object configuration = DataPaletteBlock.Strategy.SECTION_STATES.getConfiguration(
                 new FakeIdMapBiome(biomeCount),
                 bitsPerEntry
         );
         if (bitsPerEntry > 3) {
             bitsPerEntry = MathMan.log2nlz(biomeRegistry.size() - 1);
         }
-        PalettedContainer<Holder<Biome>> biomePalettedContainer = new PalettedContainer<>(
+        DataPaletteBlock<Holder<BiomeBase>> biomePalettedContainer = new DataPaletteBlock<>(
                 biomeRegistry,
                 biomeRegistry.byIdOrThrow(adapter.getInternalBiomeId(BiomeTypes.PLAINS)),
-                PalettedContainer.Strategy.SECTION_BIOMES,
+                DataPaletteBlock.Strategy.SECTION_BIOMES,
                 null
         );
 
-        final Palette<Holder<Biome>> biomePalette;
+        final DataPalette<Holder<BiomeBase>> biomePalette;
         if (bitsPerEntry == 0) {
             biomePalette = new SingleValuePalette<>(
                     biomePalettedContainer.registry,
@@ -540,21 +537,21 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
                     new ArrayList<>(palette.values()) // Must be modifiable
             );
         } else if (bitsPerEntry == 4) {
-            biomePalette = LinearPalette.create(
+            biomePalette = DataPaletteLinear.create(
                     4,
                     biomePalettedContainer.registry,
                     biomePalettedContainer,
                     new ArrayList<>(palette.values()) // Must be modifiable
             );
         } else if (bitsPerEntry < 9) {
-            biomePalette = HashMapPalette.create(
+            biomePalette = DataPaletteHash.create(
                     bitsPerEntry,
                     biomePalettedContainer.registry,
                     biomePalettedContainer,
                     new ArrayList<>(palette.values()) // Must be modifiable
             );
         } else {
-            biomePalette = GlobalPalette.create(
+            biomePalette = DataPaletteGlobal.create(
                     bitsPerEntry,
                     biomePalettedContainer.registry,
                     biomePalettedContainer,
@@ -567,7 +564,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         final int arrayLength = MathMan.ceilZero(64f / blocksPerLong);
 
 
-        BitStorage bitStorage = bitsPerEntry == 0 ? new ZeroBitStorage(64) : new SimpleBitStorage(
+        DataBits bitStorage = bitsPerEntry == 0 ? new ZeroBitStorage(64) : new SimpleBitStorage(
                 bitsPerEntry,
                 64,
                 new long[arrayLength]
@@ -584,7 +581,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
                         if (biomeType == null) {
                             continue;
                         }
-                        Holder<Biome> biome = biomeRegistry.byId(WorldEditPlugin
+                        Holder<BiomeBase> biome = biomeRegistry.byId(WorldEditPlugin
                                 .getInstance()
                                 .getBukkitImplAdapter()
                                 .getInternalBiomeId(biomeType));
@@ -601,13 +598,13 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         return biomePalettedContainer;
     }
 
-    public static void clearCounts(final LevelChunkSection section) throws IllegalAccessException {
+    public static void clearCounts(final ChunkSection section) throws IllegalAccessException {
         fieldTickingFluidCount.setShort(section, (short) 0);
         fieldTickingBlockCount.setShort(section, (short) 0);
     }
 
-    public static BiomeType adapt(Holder<Biome> biome, LevelAccessor levelAccessor) {
-        final Registry<Biome> biomeRegistry = levelAccessor.registryAccess().registryOrThrow(Registry.BIOME_REGISTRY);
+    public static BiomeType adapt(Holder<BiomeBase> biome, GeneratorAccess levelAccessor) {
+        final IRegistry<BiomeBase> biomeRegistry = levelAccessor.registryAccess().registryOrThrow(IRegistry.BIOME_REGISTRY);
         if (biomeRegistry.getKey(biome.value()) == null) {
             return biomeRegistry.asHolderIdMap().getId(biome) == -1 ? BiomeTypes.OCEAN
                     : null;
@@ -615,10 +612,10 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         return BiomeTypes.get(biome.unwrapKey().orElseThrow().location().toString());
     }
 
-    static void removeBeacon(BlockEntity beacon, LevelChunk levelChunk) {
+    static void removeBeacon(TileEntity beacon, Chunk levelChunk) {
         try {
             if (levelChunk.loaded || levelChunk.level.isClientSide()) {
-                BlockEntity blockEntity = levelChunk.blockEntities.remove(beacon.getBlockPos());
+                TileEntity blockEntity = levelChunk.blockEntities.remove(beacon.getBlockPos());
                 if (blockEntity != null) {
                     if (!levelChunk.level.isClientSide) {
                         methodRemoveGameEventListener.invoke(levelChunk, beacon, levelChunk.level);
@@ -632,8 +629,8 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         }
     }
 
-    static List<Entity> getEntities(LevelChunk chunk) {
-        ExceptionCollector<RuntimeException> collector = new ExceptionCollector<>();
+    static List<Entity> getEntities(Chunk chunk) {
+        ExceptionSuppressor<RuntimeException> collector = new ExceptionSuppressor<>();
         if (PaperLib.isPaper()) {
             if (POST_CHUNK_REWRITE) {
                 try {
@@ -662,7 +659,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
     }
 
     public static void readEntityIntoTag(Entity entity, net.minecraft.nbt.NBTTagCompound compoundTag) {
-        boolean isVillager = entity instanceof AbstractVillager && !Fawe.isMainThread();
+        boolean isVillager = entity instanceof EntityVillagerAbstract && !Fawe.isMainThread();
         boolean unset = false;
         if (isVillager) {
             try {
@@ -684,43 +681,39 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
         }
     }
 
-    record FakeIdMapBlock(int size) implements IdMap<net.minecraft.world.level.block.state.BlockState> {
+    record FakeIdMapBlock(int size) implements Registry<net.minecraft.world.level.block.state.IBlockData> {
 
         @Override
-        public int getId(final net.minecraft.world.level.block.state.BlockState entry) {
+        public int getId(final net.minecraft.world.level.block.state.IBlockData entry) {
             return 0;
         }
 
-        @Nullable
         @Override
-        public net.minecraft.world.level.block.state.BlockState byId(final int index) {
+        public net.minecraft.world.level.block.state.IBlockData byId(final int index) {
             return null;
         }
 
-        @Nonnull
         @Override
-        public Iterator<net.minecraft.world.level.block.state.BlockState> iterator() {
+        public Iterator<net.minecraft.world.level.block.state.IBlockData> iterator() {
             return Collections.emptyIterator();
         }
 
     }
 
-    record FakeIdMapBiome(int size) implements IdMap<Biome> {
+    record FakeIdMapBiome(int size) implements Registry<BiomeBase> {
 
         @Override
-        public int getId(final Biome entry) {
+        public int getId(final BiomeBase entry) {
             return 0;
         }
 
-        @Nullable
         @Override
-        public Biome byId(final int index) {
+        public BiomeBase byId(final int index) {
             return null;
         }
 
-        @Nonnull
         @Override
-        public Iterator<Biome> iterator() {
+        public Iterator<BiomeBase> iterator() {
             return Collections.emptyIterator();
         }
 

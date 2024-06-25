@@ -11,12 +11,10 @@ import com.sk89q.worldedit.extent.Extent;
 import com.sk89q.worldedit.world.block.BlockState;
 import com.sk89q.worldedit.world.block.BlockTypes;
 import com.sk89q.worldedit.world.block.BlockTypesCache;
-import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.material.Fluid;
-import net.minecraft.world.level.material.Fluids;
-
-import javax.annotation.Nullable;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.server.level.WorldServer;
+import net.minecraft.world.level.material.FluidType;
+import net.minecraft.world.level.material.FluidTypes;
 
 public class PaperweightPostProcessor implements IBatchProcessor {
 
@@ -86,7 +84,7 @@ public class PaperweightPostProcessor implements IBatchProcessor {
                 int x = i & 15;
                 int y = (i >> 8) & 15;
                 int z = (i >> 4) & 15;
-                BlockPos position = new BlockPos((chunk.getX() << 4) + x, (layer << 4) + y, (chunk.getZ() << 4) + z);
+                BlockPosition position = new BlockPosition((chunk.getX() << 4) + x, (layer << 4) + y, (chunk.getZ() << 4) + z);
                 if (liquid || replacedWasLiquid) {
                     if (liquid) {
                         addFluid(getBlocks.serverLevel, state, position);
@@ -104,7 +102,6 @@ public class PaperweightPostProcessor implements IBatchProcessor {
         }
     }
 
-    @Nullable
     @Override
     public Extent construct(final Extent child) {
         throw new UnsupportedOperationException("Processing only");
@@ -158,12 +155,12 @@ public class PaperweightPostProcessor implements IBatchProcessor {
     }
 
     @SuppressWarnings("deprecation")
-    private void addFluid(final ServerLevel serverLevel, final BlockState replacedState, final BlockPos position) {
-        Fluid type;
+    private void addFluid(final WorldServer serverLevel, final BlockState replacedState, final BlockPosition position) {
+        FluidType type;
         if (replacedState.getBlockType() == BlockTypes.LAVA) {
-            type = (int) replacedState.getState(PropertyKey.LEVEL) == 0 ? Fluids.LAVA : Fluids.FLOWING_LAVA;
+            type = (int) replacedState.getState(PropertyKey.LEVEL) == 0 ? FluidTypes.LAVA : FluidTypes.FLOWING_LAVA;
         } else {
-            type = (int) replacedState.getState(PropertyKey.LEVEL) == 0 ? Fluids.WATER : Fluids.FLOWING_WATER;
+            type = (int) replacedState.getState(PropertyKey.LEVEL) == 0 ? FluidTypes.WATER : FluidTypes.FLOWING_WATER;
         }
         serverLevel.scheduleTick(
                 position,

@@ -6,22 +6,22 @@ import com.sk89q.util.ReflectionUtil;
 import com.sk89q.worldedit.bukkit.adapter.Refraction;
 import com.sk89q.worldedit.bukkit.adapter.impl.fawe.v1_19_R1.nbt.PaperweightLazyCompoundTag;
 import com.sk89q.worldedit.world.registry.BlockMaterial;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.core.BlockPosition;
+import net.minecraft.world.level.BlockAccessAir;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.EntityBlock;
-import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.state.BlockBehaviour;
-import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.ITileEntity;
+import net.minecraft.world.level.block.entity.TileEntity;
+import net.minecraft.world.level.block.state.BlockBase;
+import net.minecraft.world.level.block.state.IBlockData;
 import net.minecraft.world.level.material.Material;
-import net.minecraft.world.level.material.PushReaction;
+import net.minecraft.world.level.material.EnumPistonReaction;
 import net.minecraft.nbt.NBTTagList;
 import org.bukkit.craftbukkit.v1_19_R1.block.data.CraftBlockData;
 
 public class PaperweightBlockMaterial implements BlockMaterial {
 
     private final Block block;
-    private final BlockState blockState;
+    private final IBlockData blockState;
     private final Material material;
     private final boolean isTranslucent;
     private final CraftBlockData craftBlockData;
@@ -33,20 +33,20 @@ public class PaperweightBlockMaterial implements BlockMaterial {
         this(block, block.defaultBlockState());
     }
 
-    public PaperweightBlockMaterial(Block block, BlockState blockState) {
+    public PaperweightBlockMaterial(Block block, IBlockData blockState) {
         this.block = block;
         this.blockState = blockState;
         this.material = blockState.getMaterial();
         this.craftBlockData = CraftBlockData.fromData(blockState);
         this.craftMaterial = craftBlockData.getMaterial();
-        BlockBehaviour.Properties blockInfo = ReflectionUtil.getField(BlockBehaviour.class, block,
+        BlockBase.BlockData blockInfo = ReflectionUtil.getField(BlockBase.class, block,
                 Refraction.pickName("properties", "aP"));
-        this.isTranslucent = !(boolean) ReflectionUtil.getField(BlockBehaviour.Properties.class, blockInfo,
+        this.isTranslucent = !(boolean) ReflectionUtil.getField(BlockBase.BlockData.class, blockInfo,
                 Refraction.pickName("canOcclude", "n")
         );
-        opacity = blockState.getLightBlock(EmptyBlockGetter.INSTANCE, BlockPos.ZERO);
-        BlockEntity tileEntity = !(block instanceof EntityBlock) ? null : ((EntityBlock) block).newBlockEntity(
-                BlockPos.ZERO,
+        opacity = blockState.getLightBlock(BlockAccessAir.INSTANCE, BlockPosition.ZERO);
+        TileEntity tileEntity = !(block instanceof ITileEntity) ? null : ((ITileEntity) block).newBlockEntity(
+                BlockPosition.ZERO,
                 blockState
         );
         tile = tileEntity == null
@@ -58,7 +58,7 @@ public class PaperweightBlockMaterial implements BlockMaterial {
         return block;
     }
 
-    public BlockState getState() {
+    public IBlockData getState() {
         return blockState;
     }
 
@@ -127,12 +127,12 @@ public class PaperweightBlockMaterial implements BlockMaterial {
 
     @Override
     public boolean isFragileWhenPushed() {
-        return material.getPushReaction() == PushReaction.DESTROY;
+        return material.getPushReaction() == EnumPistonReaction.DESTROY;
     }
 
     @Override
     public boolean isUnpushable() {
-        return material.getPushReaction() == PushReaction.BLOCK;
+        return material.getPushReaction() == EnumPistonReaction.BLOCK;
     }
 
     @Override
@@ -168,12 +168,12 @@ public class PaperweightBlockMaterial implements BlockMaterial {
 
     @Override
     public boolean hasContainer() {
-        return block instanceof EntityBlock;
+        return block instanceof ITileEntity;
     }
 
     @Override
     public boolean isTile() {
-        return block instanceof EntityBlock;
+        return block instanceof ITileEntity;
     }
 
     @Override
