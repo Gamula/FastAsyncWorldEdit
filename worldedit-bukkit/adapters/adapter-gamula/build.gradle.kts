@@ -23,7 +23,9 @@ dependencies {
     compileOnly(fileTree("libs/"))
     implementation("javax.annotation:javax.annotation-api:1.3.2")
     implementation("io.papermc:paperlib:1.0.7")
-    compileOnly("org.apache.logging.log4j:log4j-api")
-    compileOnly("org.apache.logging.log4j:log4j-core")
     implementation(project(":worldedit-bukkit"))
+}
+
+tasks.withType<JavaCompile> {
+    options.compilerArgs.add("-Xlint:-deprecation")
 }

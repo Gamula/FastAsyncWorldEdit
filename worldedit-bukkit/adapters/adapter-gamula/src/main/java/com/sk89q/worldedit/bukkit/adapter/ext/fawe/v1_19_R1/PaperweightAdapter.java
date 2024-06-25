@@ -397,7 +397,7 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
             }
 
             newState = newState.setValue(
-                    (net.minecraft.world.level.block.state.properties.IBlockState<?>) property,
+                    (net.minecraft.world.level.block.state.properties.IBlockState) property,
                     (Comparable) value
             );
         }

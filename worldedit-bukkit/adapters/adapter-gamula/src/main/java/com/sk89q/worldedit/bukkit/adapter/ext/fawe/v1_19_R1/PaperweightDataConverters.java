@@ -163,7 +163,7 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
     }
 
     private static String fixName(String key, int srcVer, TypeReference type) {
-        return INSTANCE.fixer.update(type, new Dynamic<>(OPS_NBT, net.minecraft.nbt.StringTag.valueOf(key)), srcVer, DATA_VERSION)
+        return INSTANCE.fixer.update(type, new Dynamic<>(OPS_NBT, net.minecraft.nbt.NBTTagString.valueOf(key)), srcVer, DATA_VERSION)
                 .getValue().getAsString();
     }
 
@@ -641,17 +641,17 @@ class PaperweightDataConverters extends DataFixerBuilder implements com.sk89q.wo
 
                 if (!cmp.contains("HandDropChances", 10)) {
                     nbttaglist2 = new net.minecraft.nbt.NBTTagList();
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(nbttaglist1.getFloat(0)));
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(0.0F));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(nbttaglist1.getFloat(0)));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(0.0F));
                     cmp.put("HandDropChances", nbttaglist2);
                 }
 
                 if (!cmp.contains("ArmorDropChances", 10)) {
                     nbttaglist2 = new net.minecraft.nbt.NBTTagList();
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(nbttaglist1.getFloat(1)));
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(nbttaglist1.getFloat(2)));
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(nbttaglist1.getFloat(3)));
-                    nbttaglist2.add(net.minecraft.nbt.FloatTag.valueOf(nbttaglist1.getFloat(4)));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(nbttaglist1.getFloat(1)));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(nbttaglist1.getFloat(2)));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(nbttaglist1.getFloat(3)));
+                    nbttaglist2.add(net.minecraft.nbt.NBTTagFloat.valueOf(nbttaglist1.getFloat(4)));
                     cmp.put("ArmorDropChances", nbttaglist2);
                 }
 
