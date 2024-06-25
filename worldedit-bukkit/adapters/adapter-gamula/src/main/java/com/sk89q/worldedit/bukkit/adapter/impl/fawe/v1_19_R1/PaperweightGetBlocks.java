@@ -103,7 +103,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
     private final int minSectionPosition;
     private final int maxSectionPosition;
     private final IRegistry<BiomeBase> biomeRegistry;
-    private final IRegistry<Holder<BiomeBase>> biomeHolderIdMap;
+    private final Registry<Holder<BiomeBase>> biomeHolderIdMap;
     private final ConcurrentHashMap<Integer, PaperweightGetBlocks_Copy> copies = new ConcurrentHashMap<>();
     private final Object sendLock = new Object();
     private ChunkSection[] sections;
@@ -131,7 +131,7 @@ public class PaperweightGetBlocks extends CharGetBlocks implements BukkitGetBloc
         this.skyLight = new NibbleArray[getSectionCount()];
         this.blockLight = new NibbleArray[getSectionCount()];
         this.biomeRegistry = serverLevel.registryAccess().registryOrThrow(IRegistry.BIOME_REGISTRY);
-        this.biomeHolderIdMap = (IRegistry<Holder<BiomeBase>>) biomeRegistry.asHolderIdMap();
+        this.biomeHolderIdMap = biomeRegistry.asHolderIdMap();
     }
 
     public int getChunkX() {

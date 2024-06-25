@@ -496,7 +496,7 @@ public final class PaperweightPlatformAdapter extends NMSAdapter {
      */
     public static DataPaletteBlock<Holder<BiomeBase>> getBiomePalettedContainer(
             BiomeType[] biomes,
-            IRegistry<Holder<BiomeBase>> biomeRegistry
+            Registry<Holder<BiomeBase>> biomeRegistry
     ) {
         if (biomes == null) {
             return null;

@@ -15,7 +15,6 @@ import net.minecraft.world.level.block.state.BlockBase;
 import net.minecraft.world.level.block.state.IBlockData;
 import net.minecraft.world.level.material.Material;
 import net.minecraft.world.level.material.EnumPistonReaction;
-import net.minecraft.nbt.NBTTagList;
 import org.bukkit.craftbukkit.v1_19_R1.block.data.CraftBlockData;
 
 public class PaperweightBlockMaterial implements BlockMaterial {
@@ -39,9 +38,9 @@ public class PaperweightBlockMaterial implements BlockMaterial {
         this.material = blockState.getMaterial();
         this.craftBlockData = CraftBlockData.fromData(blockState);
         this.craftMaterial = craftBlockData.getMaterial();
-        BlockBase.BlockData blockInfo = ReflectionUtil.getField(BlockBase.class, block,
+        BlockBase.Info blockInfo = ReflectionUtil.getField(BlockBase.class, block,
                 Refraction.pickName("properties", "aP"));
-        this.isTranslucent = !(boolean) ReflectionUtil.getField(BlockBase.BlockData.class, blockInfo,
+        this.isTranslucent = !(boolean) ReflectionUtil.getField(BlockBase.Info.class, blockInfo,
                 Refraction.pickName("canOcclude", "n")
         );
         opacity = blockState.getLightBlock(BlockAccessAir.INSTANCE, BlockPosition.ZERO);
